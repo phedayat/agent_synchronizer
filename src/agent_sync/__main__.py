@@ -61,7 +61,6 @@ def main(
     logger.info(f"Discovering files in {SUPPORTED_PROVIDERS.values()} for targets {targets}")
 
     files_found = list(discover_files(SUPPORTED_PROVIDERS, targets))
-    
     if not dry_run:
         for provider, file in files_found:
             logger.info(f"Moving {file} to {repo / file.name}")
