@@ -16,7 +16,7 @@ logger = Logger("main")
 def _find_and_move_files(targets: list[str], repo: Path, dry_run: bool) -> list[Path]:
     files_found = list(discover_files(SUPPORTED_PROVIDERS, targets))
     if not dry_run:
-        for provider, file in files_found:
+        for _, file in files_found:
             logger.info(f"Moving {file} to {repo / file.name}")
             move(file, repo / file.name)
     return files_found
