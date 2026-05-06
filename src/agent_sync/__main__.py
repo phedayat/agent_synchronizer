@@ -55,8 +55,11 @@ def main(
 
     repo = Path(repo_root)
     if not repo.exists():
-        logger.error(f"Repository root {repo} does not exist.")
-        raise FileNotFoundError(f"Repository root {repo} does not exist.")
+        logger.error(f"Repository root {repo} does not exist")
+        raise FileNotFoundError(f"Repository root {repo} does not exist")
+    if not repo.is_dir():
+        logger.error(f"Repository root {repo} must be a directory")
+        raise NotADirectoryError(f"Repository root {repo} must be a directory")
 
     logger.info(f"Discovering files in {SUPPORTED_PROVIDERS.values()} for targets {targets}")
 
@@ -74,6 +77,7 @@ def main(
                 symlink(file, provider / file.name)
 
     if sync_report:
+        logger.info("Generating sync report...")
         print(generate_sync_report(files_found, repo_files))
 
 
