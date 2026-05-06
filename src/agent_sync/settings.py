@@ -1,0 +1,1 @@
+DEFAULT_TARGETS = ["AGENTS.md", "CLAUDE.md", ".cursorrules", "skills", "agents"]
