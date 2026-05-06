@@ -2,12 +2,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 from .utils.logging import Logger
-from .settings import DEFAULT_TARGETS
+from .settings import DEFAULT_TARGETS, SUPPORTED_PROVIDERS
 from .providers import (
     discover_files, 
     move,
     generate_sync_report,
-    providers,
     symlink,
 )
 
@@ -25,7 +24,7 @@ def parse_args():
         "--targets",
         nargs="+",
         default=DEFAULT_TARGETS,
-        help="List of targets to synchronize."
+        help="List of target files and directories to synchronize."
     )
     parser.add_argument(
         "--dry-run",
@@ -59,9 +58,9 @@ def main(
         logger.error(f"Repository root {repo} does not exist.")
         raise FileNotFoundError(f"Repository root {repo} does not exist.")
 
-    logger.info(f"Discovering files in {providers.values()} for targets {targets}")
+    logger.info(f"Discovering files in {SUPPORTED_PROVIDERS.values()} for targets {targets}")
 
-    files_found = list(discover_files(providers, targets))
+    files_found = list(discover_files(SUPPORTED_PROVIDERS, targets))
     
     if not dry_run:
         for provider, file in files_found:
@@ -70,7 +69,7 @@ def main(
 
     repo_files = list(filter(lambda x: x.name in targets, repo.iterdir()))
     if not dry_run:
-        for provider in providers.values():
+        for provider in SUPPORTED_PROVIDERS.values():
             for file in repo_files:
                 logger.info(f"Symlinking {file} to {provider / file.name}")
                 symlink(file, provider / file.name)
