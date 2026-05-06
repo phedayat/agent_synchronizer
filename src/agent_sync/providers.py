@@ -6,13 +6,9 @@ from .utils.logging import Logger
 
 logger = Logger("providers")
 
-home = Path.home()
+def _approve(message: str) -> bool:
+    return input(message + " (y/n): ").lower() == "y"
 
-providers = {
-    "cursor": home / ".cursor",
-    "codex": home / ".codex",
-    "claude": home / ".claude",
-}
 
 def discover_files(providers: dict[str, Path], targets: list[str]):
     for provider, path in providers.items():
@@ -26,7 +22,7 @@ def discover_files(providers: dict[str, Path], targets: list[str]):
 
 def move(src: Path, dest: Path):
     """
-    Moves the directory 'src' to 'dest' and replaces 'src' with a symlink to 'dest'.
+    Moves the directory 'src' to 'dest'.
     If 'dest' exists, raises an exception.
     """
     if src.is_symlink():
@@ -39,7 +35,8 @@ def move(src: Path, dest: Path):
                 logger.info(f"Destination item {dest_item} already exists. Skipping.")
                 continue
             item.replace(dest_item)
-        shutil.rmtree(src)
+        if _approve(f"Do you want to remove {src}?"):
+            shutil.rmtree(src)
         return
     if dest.exists():
         logger.info(FileExistsError(f"Destination path {dest} already exists."))
@@ -52,11 +49,9 @@ def symlink(src: Path, dest: Path):
     if not src.exists():
         logger.info(f"Source path {src} does not exist.")
         return
-    if dest.is_symlink():
-        if dest.resolve() == src.resolve():
-            logger.info(f"Symlink already correct: {dest} -> {src}")
-            return
-        dest.unlink()
+    if dest.is_symlink() and dest.resolve() == src.resolve():
+        logger.info(f"Symlink already correct: {dest} -> {src}")
+        return
     elif dest.exists():
         logger.info(FileExistsError(f"Destination path {dest} already exists and is not a symlink."))
         return
