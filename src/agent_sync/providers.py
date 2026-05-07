@@ -28,13 +28,6 @@ def move(src: Path, dest: Path):
     if src.is_symlink():
         logger.info(f"Source path {src} is a symlink.")
         return
-    if dest.exists() and dest.is_dir():
-        for item in src.iterdir():
-            dest_item = dest / item.name
-            if dest_item.exists():
-                logger.info(f"Destination item {dest_item} already exists. Skipping.")
-                continue
-            item.replace(dest_item)
     if dest.exists():
         logger.info(FileExistsError(f"Destination path {dest} already exists."))
         return
