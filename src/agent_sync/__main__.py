@@ -3,8 +3,8 @@ from pathlib import Path
 from .args import parse_args
 from .utils.logging import Logger
 from .settings import SUPPORTED_PROVIDERS
-from .providers import (
-    discover_files, 
+from .sync_engine import (
+    discover_files,
     move,
     generate_sync_report,
     symlink,
