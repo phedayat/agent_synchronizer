@@ -35,14 +35,16 @@ def move(src: Path, dest: Path):
                 logger.info(f"Destination item {dest_item} already exists. Skipping.")
                 continue
             item.replace(dest_item)
-        if _approve(f"Do you want to remove {src}?"):
-            shutil.rmtree(src)
-        return
     if dest.exists():
         logger.info(FileExistsError(f"Destination path {dest} already exists."))
         return
 
-    src.move(dest)
+    if _approve(f"Do you want to move {src}?"):
+        logger.info(f"Moving {src} to {dest}")
+        src.move(dest)
+    else:
+        logger.info(f"Copying {src} to {dest}")
+        src.copy(dest)
 
 
 def symlink(src: Path, dest: Path):
