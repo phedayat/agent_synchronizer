@@ -1,23 +1,24 @@
 from pathlib import Path
 
+from .providers import Provider
+
 from .utils.logging import Logger
 
 logger = Logger("sync_engine")
 
 
 def _approve(message: str) -> bool:
-    return input(message + " (y/n): ").lower() == "y"
+    return input(message + " (y/n): ").strip().lower() == "y"
 
-
-def discover_files(providers: dict[str, Path], targets: list[str]):
-    for provider, path in providers.items():
-        if path.exists():
-            for target in targets:
-                if (path / target).exists():
-                    yield provider, path / target
+def discover_files(providers: list[Provider], targets: list[str]):
+    for provider in providers:
+        if provider.path.exists():
+            for target in targets + provider.files:
+                file_path = provider.path / target
+                if file_path.exists():
+                    yield provider, file_path
         else:
-            logger.warning(f"Provider {provider} not found")
-
+            logger.warning(f"Provider {provider.name} not found")
 
 def move(src: Path, dest: Path):
     """
