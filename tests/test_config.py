@@ -44,6 +44,14 @@ def test_load_config_empty_file_returns_empty_list(tmp_path):
     assert providers == []
 
 
+def test_load_config_missing_file_returns_empty_list(tmp_path):
+    config_path = tmp_path / "missing.yaml"
+
+    providers = load_config(config_path)
+
+    assert providers == []
+
+
 def test_save_config_writes_defaults_and_extras(tmp_path):
     config_path = tmp_path / "out.yaml"
     extra = Provider(name="custom", path=Path("/tmp/custom"), files=["x"])
