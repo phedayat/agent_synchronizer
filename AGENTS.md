@@ -33,7 +33,7 @@
 - Run a single file:
   - `uv run pytest tests/test_args.py`
   - `uv run pytest tests/test_logging.py`
-  - `uv run pytest tests/test_providers.py`
+  - `uv run pytest tests/test_sync_engine.py`
 - Keep tests focused and minimal; prefer unit tests for argument parsing, logging behavior, and provider filesystem flow.
 
 ## Development Rules
@@ -43,6 +43,8 @@
 - If dependencies change, update lockfile with `uv lock`.
 - Prefer `pathlib` and explicit path handling over string path manipulation.
 - Log important file operations; avoid silent destructive behavior.
+- To add a provider, create a new `Provider` instance in `src/agent_sync/providers.py` with the provider `name`, `path`, and `files`, then append that instance to the `supported_providers` list.
+- Keep sync flow explicit: use `enumerate_targets` to build expected `(provider, source, dest, specific)` entries, `_move_files` to move existing sources into the repo, and `_symlink_files` to sync provider links from repo destinations.
 
 ## Safety for File Operations
 
@@ -55,13 +57,14 @@
 
 - Make the smallest change that solves the task.
 - Do not refactor unrelated code.
-- Keep naming consistent with current codebase (`providers`, `discover_files`, `move`, `symlink`).
+- Keep naming consistent with current codebase (`providers`, `enumerate_targets`, `discover_files`, `move`, `symlink`, `supported_providers`).
 - Update documentation when behavior or commands change.
 
 ## Quick Task Checklist
 
 - Confirm intent and scope.
 - Run/verify with `uv run ...`.
+- Validate sync changes with both `--dry-run` and real `--sync-report` runs when behavior changes.
 - Keep edits minimal and targeted.
 - Re-check filesystem edge cases.
 - Summarize what changed and any risks.
