@@ -25,6 +25,18 @@
   - `--dry-run`
   - `--sync-report`
   - `--verbose`
+  - `--config`
+  - `--save-config`
+
+## Config Usage
+
+- Config file format: YAML with a top-level `providers` key containing provider objects (`name`, `path`, `files`).
+- Loading config: `--config <path>` loads providers from that YAML and merges them with `supported_providers` by provider `name`.
+- Missing config file: loading a non-existent `--config` path is supported and treated as an empty provider config.
+- Empty config file/object: treated as no configured providers.
+- Invalid config shape: if a config file exists but omits the `providers` key, raise an error.
+- Saving config: `--save-config` writes merged providers (defaults + loaded config) to `--config`; loaded config providers win on name conflicts.
+- `--save-config` requires `--config <path>` so there is an explicit destination file.
 
 ## Testing
 
