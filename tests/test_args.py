@@ -1,3 +1,5 @@
+import pytest
+
 from agent_sync.args import parse_args
 from agent_sync.settings import DEFAULT_TARGETS
 
@@ -12,6 +14,8 @@ def test_parse_args_defaults(monkeypatch):
     assert args.dry_run is False
     assert args.sync_report is False
     assert args.verbose is False
+    assert args.config is None
+    assert args.save_config is False
 
 
 def test_parse_args_targets(monkeypatch):
@@ -50,6 +54,33 @@ def test_parse_args_verbose(monkeypatch):
     assert args.verbose is True
 
 
+def test_parse_args_config(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv", ["agent-sync", "/repo", "--config", "/path/to/config.yaml"]
+    )
+
+    args = parse_args()
+
+    assert args.config == "/path/to/config.yaml"
+    assert args.save_config is False
+
+
+def test_parse_args_save_config(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--save-config"])
+
+    args = parse_args()
+
+    assert args.save_config is True
+    assert args.config is None
+
+
+def test_parse_args_config_missing_value_raises(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--config"])
+
+    with pytest.raises(SystemExit):
+        parse_args()
+
+
 def test_parse_args_all_flags_together(monkeypatch):
     monkeypatch.setattr(
         "sys.argv",
@@ -62,6 +93,9 @@ def test_parse_args_all_flags_together(monkeypatch):
             "--dry-run",
             "--sync-report",
             "--verbose",
+            "--config",
+            "/path/to/config.yaml",
+            "--save-config",
         ],
     )
 
@@ -72,3 +106,5 @@ def test_parse_args_all_flags_together(monkeypatch):
     assert args.dry_run is True
     assert args.sync_report is True
     assert args.verbose is True
+    assert args.config == "/path/to/config.yaml"
+    assert args.save_config is True
