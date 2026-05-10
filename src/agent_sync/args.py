@@ -31,4 +31,14 @@ def parse_args():
         action="store_true",
         help="Enable verbose logging output."
     )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to a YAML config file describing providers.",
+    )
+    parser.add_argument(
+        "--save-config",
+        action="store_true",
+        help="Save merged providers (defaults + loaded config) to --config.",
+    )
     return parser.parse_args()
