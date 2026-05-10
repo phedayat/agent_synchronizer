@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent_sync import sync_engine
+from agent_sync.providers import Provider
 
 
 def test_approve_true_when_input_is_y():
@@ -14,29 +15,34 @@ def test_approve_false_for_non_y_response():
         assert sync_engine._approve("Proceed") is False
 
 
-def test_discover_files_yields_existing_targets_only(tmp_path: Path):
-    provider_path = tmp_path / "provider"
-    provider_path.mkdir()
-    existing = provider_path / "AGENTS.md"
-    existing.write_text("x")
+def test_enumerate_targets_builds_shared_targets_for_each_provider(tmp_path: Path):
+    repo = tmp_path / "repo"
+    cursor_provider = Provider(name="cursor", path=tmp_path / "cursor", files=[])
+    claude_provider = Provider(name="claude", path=tmp_path / "claude", files=[])
 
-    providers_map = {"cursor": provider_path}
-    targets = ["AGENTS.md", "MISSING.md"]
+    targets = ["AGENTS.md", "skills"]
 
-    found = list(sync_engine.discover_files(providers_map, targets))
+    expected = sync_engine.enumerate_targets([cursor_provider, claude_provider], targets, repo)
 
-    assert found == [("cursor", existing)]
+    assert expected == [
+        (cursor_provider, cursor_provider.path / "AGENTS.md", repo / "AGENTS.md", False),
+        (cursor_provider, cursor_provider.path / "skills", repo / "skills", False),
+        (claude_provider, claude_provider.path / "AGENTS.md", repo / "AGENTS.md", False),
+        (claude_provider, claude_provider.path / "skills", repo / "skills", False),
+    ]
 
 
-def test_discover_files_logs_warning_for_missing_provider(tmp_path: Path):
-    missing_provider = tmp_path / "does-not-exist"
-    providers_map = {"codex": missing_provider}
+def test_enumerate_targets_puts_provider_specific_targets_under_provider_dir(tmp_path: Path):
+    repo = tmp_path / "repo"
+    provider = Provider(name="codex", path=tmp_path / "codex", files=["config.toml"])
 
-    with patch.object(sync_engine.logger, "warning") as warning:
-        found = list(sync_engine.discover_files(providers_map, ["AGENTS.md"]))
+    expected = sync_engine.enumerate_targets([provider], ["AGENTS.md"], repo)
 
-    assert found == []
-    warning.assert_called_once()
+    assert expected == [
+        (provider, provider.path / "AGENTS.md", repo / "AGENTS.md", False),
+        (provider, provider.path / "config.toml", repo / "codex" / "config.toml", True),
+    ]
+
 
 
 def test_move_noop_when_source_is_symlink(tmp_path: Path):
@@ -142,9 +148,11 @@ def test_symlink_creates_link_when_valid(tmp_path: Path):
 
 
 def test_generate_sync_report_contains_counts_and_entries(tmp_path: Path):
+    cursor_provider = Provider(name="cursor", path=tmp_path / "cursor", files=[])
+    codex_provider = Provider(name="codex", path=tmp_path / "codex", files=[])
     files_found = [
-        ("cursor", tmp_path / "AGENTS.md"),
-        ("codex", tmp_path / "skills"),
+        (cursor_provider, tmp_path / "AGENTS.md", False),
+        (codex_provider, tmp_path / "skills", True),
     ]
     repo_files = [tmp_path / "AGENTS.md"]
 
@@ -152,6 +160,8 @@ def test_generate_sync_report_contains_counts_and_entries(tmp_path: Path):
 
     assert "Provider: cursor" in report
     assert "Provider: codex" in report
+    assert "Specific: False" in report
+    assert "Specific: True" in report
     assert f"Repo file: {tmp_path / 'AGENTS.md'}" in report
     assert "Total files: 2" in report
     assert "Total repo files: 1" in report
