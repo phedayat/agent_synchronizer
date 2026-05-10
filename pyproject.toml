@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Synchronize agent files across providers"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0",
+]
 
 [project.scripts]
 agent-sync = "agent_sync.__main__:cli"
