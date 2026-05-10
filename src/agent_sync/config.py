@@ -16,8 +16,12 @@ def merge_providers(base: list[Provider], override: list[Provider]) -> list[Prov
 
 
 def load_config(path: Path) -> list[Provider]:
-    with path.open("r") as file:
-        data = yaml.safe_load(file) or {}
+    try:
+        with path.open("r") as file:
+            data = yaml.safe_load(file) or {}
+    except FileNotFoundError:
+        logger.info(f"Config file {path} not found; using empty provider config")
+        return []
 
     if not data:
         return []
