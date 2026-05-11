@@ -33,7 +33,7 @@ def move(src: Path, dest: Path):
         logger.info(f"Source path {src} is a symlink.")
         return
     if dest.exists():
-        logger.info(FileExistsError(f"Destination path {dest} already exists."))
+        logger.info(f"Destination path {dest} already exists.")
         return
 
     if _approve(f"Do you want to move {src}?"):
@@ -52,7 +52,7 @@ def symlink(src: Path, dest: Path):
         logger.info(f"Symlink already correct: {dest} -> {src}")
         return
     elif dest.exists():
-        logger.info(FileExistsError(f"Destination path {dest} already exists and is not a symlink."))
+        logger.info(f"Destination path {dest} already exists and is not a symlink.")
         return
 
     dest.symlink_to(src, target_is_directory=src.is_dir())
