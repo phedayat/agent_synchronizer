@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from . import config as config_module
+from . import config as cfg
 from .args import parse_args
 from .providers import supported_providers, Provider
 from .sync_engine import (
@@ -49,23 +49,15 @@ def main(
 ):
     logger.set_verbosity(verbose)
 
-    print(f"Dry run: {dry_run}")
-    print(f"Sync report: {sync_report}")
-    print(f"Verbose: {verbose}")
-    print(f"Repo root: {repo_root}")
-    print(f"Targets: {targets}")
-    print(f"Config: {config}")
-    print(f"Save config: {save_config}")
-
     loaded: list[Provider] = []
     if config is not None:
-        loaded = config_module.load_config(Path(config))
+        loaded = cfg.load_config(Path(config))
     if save_config:
         if config is None:
             raise ValueError("--save-config requires --config <path>")
-        config_module.save_config(Path(config), loaded)
+        cfg.save_config(Path(config), loaded)
 
-    providers = config_module.merge_providers(supported_providers, loaded)
+    providers = cfg.merge_providers(supported_providers, loaded)
 
     repo = Path(repo_root)
     if not repo.exists():
