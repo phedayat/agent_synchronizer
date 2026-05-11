@@ -1,34 +1,40 @@
 from pathlib import Path
 
+from . import config as cfg
 from .args import parse_args
-from .utils.logging import Logger
-from .settings import SUPPORTED_PROVIDERS
-from .providers import (
-    discover_files, 
-    move,
+from .providers import supported_providers
+from .sync_engine import (
+    enumerate_targets,
     generate_sync_report,
+    move,
     symlink,
 )
+from .types import Expected, Provider
+from .utils.logging import Logger
 
 logger = Logger("main")
 
 
-def _find_and_move_files(targets: list[str], repo: Path, dry_run: bool) -> list[Path]:
-    files_found = list(discover_files(SUPPORTED_PROVIDERS, targets))
-    if not dry_run:
-        for _, file in files_found:
-            logger.info(f"Moving {file} to {repo / file.name}")
-            move(file, repo / file.name)
-    return files_found
+def _move_files(expected: Expected, dry_run: bool) -> None:
+    if dry_run:
+        return
 
-def _symlink_to_repo(targets: list[str], repo: Path, dry_run: bool) -> list[Path]:
-    repo_files = list(filter(lambda x: x.name in targets, repo.iterdir()))
-    if not dry_run:
-        for provider in SUPPORTED_PROVIDERS.values():
-            for file in repo_files:
-                logger.info(f"Symlinking {file} to {provider / file.name}")
-                symlink(file, provider / file.name)
-    return repo_files
+    for _, source, dest, _ in expected:
+        if not source.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Moving {source} to {dest}")
+        move(source, dest)
+
+
+def _symlink_files(expected: Expected, dry_run: bool) -> None:
+    if dry_run:
+        return
+
+    for _, source, dest, _ in expected:
+        logger.info(f"Symlinking {source} -> {dest}")
+        symlink(dest, source)
+
 
 def main(
     targets: list[str],
@@ -36,8 +42,20 @@ def main(
     sync_report: bool,
     verbose: bool,
     repo_root: str,
+    config: str | None,
+    save_config: bool,
 ):
     logger.set_verbosity(verbose)
+
+    loaded: list[Provider] = []
+    if config is not None:
+        loaded = cfg.load_config(Path(config))
+    if save_config:
+        if config is None:
+            raise ValueError("--save-config requires --config <path>")
+        cfg.save_config(Path(config), loaded)
+
+    providers = cfg.merge_providers(supported_providers, loaded)
 
     repo = Path(repo_root)
     if not repo.exists():
@@ -47,15 +65,20 @@ def main(
         logger.error(f"Repository root {repo} must be a directory")
         raise NotADirectoryError(f"Repository root {repo} must be a directory")
 
-    logger.info(f"Discovering files in {SUPPORTED_PROVIDERS.values()} for targets {targets}")
-    files_found = _find_and_move_files(targets, dry_run, repo)
+    logger.info(
+        f"Discovering files in {[p.path for p in providers]} for targets {targets}"
+    )
+    expected = enumerate_targets(providers, targets, repo)
 
-    logger.info("Linking discovered files to repo")
-    repo_files = _symlink_to_repo(targets, repo, dry_run)
+    logger.info("Moving files to repo")
+    _move_files(expected, dry_run)
+
+    logger.info("Linking files from repo back to providers")
+    _symlink_files(expected, dry_run)
 
     if sync_report:
         logger.info("Generating sync report")
-        print(generate_sync_report(files_found, repo_files))
+        print(generate_sync_report(expected))
 
 
 def cli():
@@ -66,6 +89,8 @@ def cli():
         args.sync_report,
         args.verbose,
         args.repo_root,
+        args.config,
+        args.save_config,
     )
 
 
