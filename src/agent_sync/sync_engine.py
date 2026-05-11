@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from .providers import Provider
-
 from .utils.logging import Logger
+from .types import Expected
 
 logger = Logger("sync_engine", verbose=True)
 
@@ -13,7 +13,7 @@ def _approve(message: str) -> bool:
 
 def enumerate_targets(
     providers: list[Provider], targets: list[str], repo: Path
-) -> list[tuple[Provider, Path, Path, bool]]:
+) -> Expected:
     expected = []
     for provider in providers:
         for target in targets + provider.files:
@@ -58,16 +58,11 @@ def symlink(src: Path, dest: Path):
     dest.symlink_to(src, target_is_directory=src.is_dir())
 
 
-def generate_sync_report(files_found: list[tuple[str, Path]], repo_files: list[Path]):
+def generate_sync_report(expected: Expected):
     report = ""
-    if not files_found:
+    if not expected:
         return "No files found"
-    if not repo_files:
-        return "No repo files found"
-    for provider, file, specific in files_found:
-        report += f"Provider: {provider.name}, File: {file}, Specific: {specific}\n"
-    for repo_file in repo_files:
-        report += f"Repo file: {repo_file}\n"
-    report += f"Total files: {len(files_found)}\n"
-    report += f"Total repo files: {len(repo_files)}\n"
+    for provider, source, dest, specific in expected:
+        report += f"Provider: {provider.name}, Source: {source}, Dest: {dest}, Specific: {specific}\n"
+    report += f"Total files: {len(expected)}\n"
     return report

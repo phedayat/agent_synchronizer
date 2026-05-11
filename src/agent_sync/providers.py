@@ -1,11 +1,6 @@
 from pathlib import Path
-from dataclasses import dataclass
 
-@dataclass
-class Provider:
-    name: str
-    path: Path
-    files: list[str]
+from .types import Provider
 
 codex = Provider(name="codex", path=Path.home() / ".codex", files=["config.toml"])
 claude = Provider(name="claude", path=Path.home() / ".claude", files=["settings.json"])

@@ -10,11 +10,9 @@ from .sync_engine import (
     symlink,
 )
 from .utils.logging import Logger
+from .types import Expected
 
 logger = Logger("main")
-
-
-Expected = list[tuple[Provider, Path, Path, bool]]
 
 
 def _move_files(expected: Expected, dry_run: bool) -> None:
