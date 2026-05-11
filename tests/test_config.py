@@ -74,7 +74,9 @@ def test_save_config_existing_overrides_default(tmp_path):
     save_config(config_path, [override])
 
     data = yaml.safe_load(config_path.read_text())
-    codex_entry = next(provider for provider in data["providers"] if provider["name"] == "codex")
+    codex_entry = next(
+        provider for provider in data["providers"] if provider["name"] == "codex"
+    )
     assert codex_entry["path"] == "/custom/codex"
     assert codex_entry["files"] == ["override.toml"]
 

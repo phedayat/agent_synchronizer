@@ -22,17 +22,31 @@ def test_enumerate_targets_builds_shared_targets_for_each_provider(tmp_path: Pat
 
     targets = ["AGENTS.md", "skills"]
 
-    expected = sync_engine.enumerate_targets([cursor_provider, claude_provider], targets, repo)
+    expected = sync_engine.enumerate_targets(
+        [cursor_provider, claude_provider], targets, repo
+    )
 
     assert expected == [
-        (cursor_provider, cursor_provider.path / "AGENTS.md", repo / "AGENTS.md", False),
+        (
+            cursor_provider,
+            cursor_provider.path / "AGENTS.md",
+            repo / "AGENTS.md",
+            False,
+        ),
         (cursor_provider, cursor_provider.path / "skills", repo / "skills", False),
-        (claude_provider, claude_provider.path / "AGENTS.md", repo / "AGENTS.md", False),
+        (
+            claude_provider,
+            claude_provider.path / "AGENTS.md",
+            repo / "AGENTS.md",
+            False,
+        ),
         (claude_provider, claude_provider.path / "skills", repo / "skills", False),
     ]
 
 
-def test_enumerate_targets_puts_provider_specific_targets_under_provider_dir(tmp_path: Path):
+def test_enumerate_targets_puts_provider_specific_targets_under_provider_dir(
+    tmp_path: Path,
+):
     repo = tmp_path / "repo"
     provider = Provider(name="codex", path=tmp_path / "codex", files=["config.toml"])
 
@@ -42,7 +56,6 @@ def test_enumerate_targets_puts_provider_specific_targets_under_provider_dir(tmp
         (provider, provider.path / "AGENTS.md", repo / "AGENTS.md", False),
         (provider, provider.path / "config.toml", repo / "codex" / "config.toml", True),
     ]
-
 
 
 def test_move_noop_when_source_is_symlink(tmp_path: Path):
@@ -75,11 +88,12 @@ def test_move_calls_move_when_approved(tmp_path: Path):
     src = tmp_path / "src"
     dest = tmp_path / "dest"
 
-    with patch.object(sync_engine, "_approve", return_value=True), patch.object(
-        sync_engine.logger, "info"
-    ), patch.object(Path, "move", autospec=True) as move_mock, patch.object(
-        Path, "copy", autospec=True
-    ) as copy_mock:
+    with (
+        patch.object(sync_engine, "_approve", return_value=True),
+        patch.object(sync_engine.logger, "info"),
+        patch.object(Path, "move", autospec=True) as move_mock,
+        patch.object(Path, "copy", autospec=True) as copy_mock,
+    ):
         sync_engine.move(src, dest)
 
     move_mock.assert_called_once_with(src, dest)
@@ -90,11 +104,12 @@ def test_move_calls_copy_when_not_approved(tmp_path: Path):
     src = tmp_path / "src"
     dest = tmp_path / "dest"
 
-    with patch.object(sync_engine, "_approve", return_value=False), patch.object(
-        sync_engine.logger, "info"
-    ), patch.object(Path, "move", autospec=True) as move_mock, patch.object(
-        Path, "copy", autospec=True
-    ) as copy_mock:
+    with (
+        patch.object(sync_engine, "_approve", return_value=False),
+        patch.object(sync_engine.logger, "info"),
+        patch.object(Path, "move", autospec=True) as move_mock,
+        patch.object(Path, "copy", autospec=True) as copy_mock,
+    ):
         sync_engine.move(src, dest)
 
     copy_mock.assert_called_once_with(src, dest)
@@ -149,19 +164,37 @@ def test_symlink_creates_link_when_valid(tmp_path: Path):
 
 def test_generate_sync_report_contains_counts_and_entries(tmp_path: Path):
     cursor_provider = Provider(name="cursor", path=tmp_path / "cursor", files=[])
-    codex_provider = Provider(name="codex", path=tmp_path / "codex", files=[])
-    files_found = [
-        (cursor_provider, tmp_path / "AGENTS.md", False),
-        (codex_provider, tmp_path / "skills", True),
+    codex_provider = Provider(
+        name="codex", path=tmp_path / "codex", files=["config.toml"]
+    )
+    repo = tmp_path / "repo"
+    expected = [
+        (
+            cursor_provider,
+            cursor_provider.path / "AGENTS.md",
+            repo / "AGENTS.md",
+            False,
+        ),
+        (
+            codex_provider,
+            codex_provider.path / "config.toml",
+            repo / "codex" / "config.toml",
+            True,
+        ),
     ]
-    repo_files = [tmp_path / "AGENTS.md"]
 
-    report = sync_engine.generate_sync_report(files_found, repo_files)
+    report = sync_engine.generate_sync_report(expected)
 
     assert "Provider: cursor" in report
     assert "Provider: codex" in report
     assert "Specific: False" in report
     assert "Specific: True" in report
-    assert f"Repo file: {tmp_path / 'AGENTS.md'}" in report
+    assert f"Source: {cursor_provider.path / 'AGENTS.md'}" in report
+    assert f"Dest: {repo / 'AGENTS.md'}" in report
+    assert f"Source: {codex_provider.path / 'config.toml'}" in report
+    assert f"Dest: {repo / 'codex' / 'config.toml'}" in report
     assert "Total files: 2" in report
-    assert "Total repo files: 1" in report
+
+
+def test_generate_sync_report_returns_no_files_found_when_empty():
+    assert sync_engine.generate_sync_report([]) == "No files found"
