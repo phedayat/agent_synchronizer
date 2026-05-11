@@ -2,15 +2,15 @@ from pathlib import Path
 
 from . import config as cfg
 from .args import parse_args
-from .providers import supported_providers, Provider
+from .providers import supported_providers
 from .sync_engine import (
     enumerate_targets,
-    move,
     generate_sync_report,
+    move,
     symlink,
 )
+from .types import Expected, Provider
 from .utils.logging import Logger
-from .types import Expected
 
 logger = Logger("main")
 
@@ -76,10 +76,7 @@ def main(
 
     if sync_report:
         logger.info("Generating sync report")
-        files_found = [(provider, source, specific) for provider, source, _, specific in expected if source.exists()]
-        repo_files = [dest for _, _, dest, _ in expected if dest.exists()]
-        
-        print(generate_sync_report(files_found, repo_files))
+        print(generate_sync_report(expected))
 
 
 def cli():
