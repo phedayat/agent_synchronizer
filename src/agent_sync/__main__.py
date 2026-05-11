@@ -65,7 +65,9 @@ def main(
         logger.error(f"Repository root {repo} must be a directory")
         raise NotADirectoryError(f"Repository root {repo} must be a directory")
 
-    logger.info(f"Discovering files in {[p.path for p in providers]} for targets {targets}")
+    logger.info(
+        f"Discovering files in {[p.path for p in providers]} for targets {targets}"
+    )
     expected = enumerate_targets(providers, targets, repo)
 
     logger.info("Moving files to repo")

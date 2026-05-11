@@ -1,5 +1,6 @@
 import logging
 
+
 class Logger:
     def __init__(self, name: str = __name__, verbose: bool = False):
         self.logger = self._get_logger(name)
@@ -9,7 +10,9 @@ class Logger:
         logger = logging.getLogger(name)
 
         if not logger.handlers:
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
             handler = logging.StreamHandler()
             handler.setFormatter(formatter)
             logger.addHandler(handler)
