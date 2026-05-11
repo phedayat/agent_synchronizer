@@ -44,9 +44,10 @@
 - Run all tests: `uv run pytest`.
 - Run a single file:
   - `uv run pytest tests/test_args.py`
+  - `uv run pytest tests/test_config.py`
   - `uv run pytest tests/test_logging.py`
   - `uv run pytest tests/test_sync_engine.py`
-- Keep tests focused and minimal; prefer unit tests for argument parsing, logging behavior, and provider filesystem flow.
+- Keep tests focused and minimal; prefer unit tests for argument parsing, config loading/merging, logging behavior, and provider filesystem flow.
 
 ## Development Rules
 
@@ -55,8 +56,8 @@
 - If dependencies change, update lockfile with `uv lock`.
 - Prefer `pathlib` and explicit path handling over string path manipulation.
 - Log important file operations; avoid silent destructive behavior.
-- To add a provider, create a new `Provider` instance in `src/agent_sync/providers.py` with the provider `name`, `path`, and `files`, then append that instance to the `supported_providers` list.
-- Keep sync flow explicit: use `enumerate_targets` to build expected `(provider, source, dest, specific)` entries, `_move_files` to move existing sources into the repo, and `_symlink_files` to sync provider links from repo destinations.
+- To add a provider, create a new `Provider` instance in `src/agent_sync/providers.py` with the provider `name`, `path`, and `files`, then append that instance to the `supported_providers` list. `Provider` itself is defined in `src/agent_sync/types.py`.
+- Keep sync flow explicit: use `enumerate_targets` (in `src/agent_sync/sync_engine.py`) to build expected `(provider, source, dest, specific)` entries, then `_move_files` and `_symlink_files` (in `src/agent_sync/__main__.py`) to move existing sources into the repo and link provider paths back to repo destinations. Use `generate_sync_report` to render the `--sync-report` output from those expected entries.
 
 ## Safety for File Operations
 
@@ -69,7 +70,7 @@
 
 - Make the smallest change that solves the task.
 - Do not refactor unrelated code.
-- Keep naming consistent with current codebase (`providers`, `enumerate_targets`, `discover_files`, `move`, `symlink`, `supported_providers`).
+- Keep naming consistent with current codebase (`providers`, `supported_providers`, `enumerate_targets`, `move`, `symlink`, `generate_sync_report`, `_move_files`, `_symlink_files`, `merge_providers`, `load_config`, `save_config`).
 - Update documentation when behavior or commands change.
 
 ## Quick Task Checklist
