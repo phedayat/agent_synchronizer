@@ -2,6 +2,12 @@
 
 CLI tool for syncing skills, subagents, AGENTS/CLAUDE.md and provider-specific files.
 
+## Install 
+
+```shell
+uv add agent-synchronizer
+```
+
 ## Usage
 
 ```shell
