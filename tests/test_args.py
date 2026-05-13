@@ -1,10 +1,10 @@
 import pytest
 
-from agent_sync.args import parse_args
+from agent_synchronizer.args import parse_args
 
 
 def test_parse_args_defaults(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo"])
+    monkeypatch.setattr("sys.argv", ["agent-synchronizer", "/repo"])
 
     args = parse_args()
 
@@ -20,7 +20,7 @@ def test_parse_args_defaults(monkeypatch):
 def test_parse_args_targets(monkeypatch):
     monkeypatch.setattr(
         "sys.argv",
-        ["agent-sync", "/repo", "--targets", "AGENTS.md", "skills", "agents"],
+        ["agent-synchronizer", "/repo", "--targets", "AGENTS.md", "skills", "agents"],
     )
 
     args = parse_args()
@@ -30,7 +30,7 @@ def test_parse_args_targets(monkeypatch):
 
 
 def test_parse_args_dry_run(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--dry-run"])
+    monkeypatch.setattr("sys.argv", ["agent-synchronizer", "/repo", "--dry-run"])
 
     args = parse_args()
 
@@ -38,7 +38,7 @@ def test_parse_args_dry_run(monkeypatch):
 
 
 def test_parse_args_sync_report(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--sync-report"])
+    monkeypatch.setattr("sys.argv", ["agent-synchronizer", "/repo", "--sync-report"])
 
     args = parse_args()
 
@@ -46,7 +46,7 @@ def test_parse_args_sync_report(monkeypatch):
 
 
 def test_parse_args_verbose(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--verbose"])
+    monkeypatch.setattr("sys.argv", ["agent-synchronizer", "/repo", "--verbose"])
 
     args = parse_args()
 
@@ -55,7 +55,7 @@ def test_parse_args_verbose(monkeypatch):
 
 def test_parse_args_config(monkeypatch):
     monkeypatch.setattr(
-        "sys.argv", ["agent-sync", "/repo", "--config", "/path/to/config.yaml"]
+        "sys.argv", ["agent-synchronizer", "/repo", "--config", "/path/to/config.yaml"]
     )
 
     args = parse_args()
@@ -65,7 +65,7 @@ def test_parse_args_config(monkeypatch):
 
 
 def test_parse_args_save_config(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--save-config"])
+    monkeypatch.setattr("sys.argv", ["agent-synchronizer", "/repo", "--save-config"])
 
     args = parse_args()
 
@@ -74,7 +74,7 @@ def test_parse_args_save_config(monkeypatch):
 
 
 def test_parse_args_config_missing_value_raises(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agent-sync", "/repo", "--config"])
+    monkeypatch.setattr("sys.argv", ["agent-synchronizer", "/repo", "--config"])
 
     with pytest.raises(SystemExit):
         parse_args()
@@ -84,7 +84,7 @@ def test_parse_args_all_flags_together(monkeypatch):
     monkeypatch.setattr(
         "sys.argv",
         [
-            "agent-sync",
+            "agent-synchronizer",
             "/repo",
             "--targets",
             "AGENTS.md",

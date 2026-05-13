@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import yaml
 
-from agent_sync.__main__ import main
+from agent_synchronizer.__main__ import main
 
 
 def test_main_uses_config_common_when_targets_are_omitted(tmp_path):
@@ -21,7 +21,7 @@ def test_main_uses_config_common_when_targets_are_omitted(tmp_path):
     )
 
     with patch(
-        "agent_sync.__main__.enumerate_targets", return_value=[]
+        "agent_synchronizer.__main__.enumerate_targets", return_value=[]
     ) as enumerate_mock:
         main(None, True, False, False, str(repo), str(config_path), False)
 
@@ -44,7 +44,7 @@ def test_main_targets_override_config_common(tmp_path):
     )
 
     with patch(
-        "agent_sync.__main__.enumerate_targets", return_value=[]
+        "agent_synchronizer.__main__.enumerate_targets", return_value=[]
     ) as enumerate_mock:
         main(["override"], True, False, False, str(repo), str(config_path), False)
 

@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import patch
 
-from agent_sync.utils.logging import Logger
+from agent_synchronizer.utils.logging import Logger
 
 
 def test_logger_initializes_with_warning_level_by_default():
