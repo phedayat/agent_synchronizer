@@ -9,7 +9,7 @@ from .sync_engine import (
     move,
     symlink,
 )
-from .types import Expected, Provider
+from .types import Config, Expected
 from .utils.logging import Logger
 
 logger = Logger("main")
@@ -37,7 +37,7 @@ def _symlink_files(expected: Expected, dry_run: bool) -> None:
 
 
 def main(
-    targets: list[str],
+    targets: list[str] | None,
     dry_run: bool,
     sync_report: bool,
     verbose: bool,
@@ -47,7 +47,7 @@ def main(
 ):
     logger.set_verbosity(verbose)
 
-    loaded: list[Provider] = []
+    loaded: Config = cfg.default_config()
     if config is not None:
         loaded = cfg.load_config(Path(config))
     if save_config:
@@ -55,7 +55,8 @@ def main(
             raise ValueError("--save-config requires --config <path>")
         cfg.save_config(Path(config), loaded)
 
-    providers = cfg.merge_providers(supported_providers, loaded)
+    common = targets if targets is not None else loaded.common
+    providers = cfg.merge_providers(supported_providers, loaded.providers)
 
     repo = Path(repo_root)
     if not repo.exists():
@@ -66,9 +67,9 @@ def main(
         raise NotADirectoryError(f"Repository root {repo} must be a directory")
 
     logger.info(
-        f"Discovering files in {[p.path for p in providers]} for targets {targets}"
+        f"Discovering files in {[p.path for p in providers]} for targets {common}"
     )
-    expected = enumerate_targets(providers, targets, repo)
+    expected = enumerate_targets(providers, common, repo)
 
     logger.info("Moving files to repo")
     _move_files(expected, dry_run)
