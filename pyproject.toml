@@ -1,5 +1,5 @@
 [project]
-name = "agent-sync"
+name = "agent-synchronizer"
 version = "0.1.0"
 description = "Synchronize agent files across providers"
 readme = "README.md"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agent-sync = "agent_sync.__main__:cli"
+agent-synchronizer = "agent_synchronizer.__main__:cli"
 
 [build-system]
 requires = ["uv_build>=0.11.11,<0.12"]
