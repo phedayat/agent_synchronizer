@@ -1,1 +1,1 @@
-DEFAULT_TARGETS = ["AGENTS.md", "CLAUDE.md", ".cursorrules", "skills", "agents"]
+DEFAULT_COMMON = ["AGENTS.md", "skills", "agents"]
