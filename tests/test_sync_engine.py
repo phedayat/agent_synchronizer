@@ -1,8 +1,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_sync import sync_engine
-from agent_sync.providers import Provider
+from agent_synchronizer import sync_engine
+from agent_synchronizer.providers import Provider
 
 
 def test_approve_true_when_input_is_y():

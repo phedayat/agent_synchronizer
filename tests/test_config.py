@@ -3,10 +3,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent_sync.config import load_config, merge_providers, save_config
-from agent_sync.providers import Provider, supported_providers
-from agent_sync.settings import DEFAULT_COMMON
-from agent_sync.types import Config
+from agent_synchronizer.config import load_config, merge_providers, save_config
+from agent_synchronizer.providers import Provider, supported_providers
+from agent_synchronizer.settings import DEFAULT_COMMON
+from agent_synchronizer.types import Config
 
 
 def test_load_config_returns_common_and_providers(tmp_path):
