@@ -1,11 +1,11 @@
-# Agent Sync
+# Agent Synchronizer
 
 CLI tool for syncing skills, subagents, AGENTS/CLAUDE.md and provider-specific files.
 
 ## Usage
 
 ```shell
-uv run agent-sync <central_repo> \
+uv run agent-synchronizer <central_repo> \
     --config <config_path> \
     --save-config \
     --sync-report \

@@ -19,7 +19,7 @@
 
 ## Standard Commands
 
-- Run CLI: `uv run agent-sync <repo_root>`
+- Run CLI: `uv run agent-synchronizer <repo_root>`
 - Available flags:
   - `--targets`
   - `--dry-run`
