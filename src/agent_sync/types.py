@@ -9,4 +9,10 @@ class Provider:
     files: list[str]
 
 
+@dataclass
+class Config:
+    common: list[str]
+    providers: list[Provider]
+
+
 Expected = list[tuple[Provider, Path, Path, bool]]

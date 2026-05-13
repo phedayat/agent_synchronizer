@@ -1,7 +1,5 @@
 from argparse import ArgumentParser
 
-from .settings import DEFAULT_TARGETS
-
 
 def parse_args():
     parser = ArgumentParser(
@@ -11,7 +9,7 @@ def parse_args():
     parser.add_argument(
         "--targets",
         nargs="+",
-        default=DEFAULT_TARGETS,
+        default=None,
         help="List of target files and directories to synchronize.",
     )
     parser.add_argument(

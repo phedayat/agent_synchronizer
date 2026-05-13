@@ -3,6 +3,8 @@ from pathlib import Path
 import yaml
 
 from .providers import Provider, supported_providers
+from .settings import DEFAULT_COMMON
+from .types import Config
 from .utils.logging import Logger
 
 logger = Logger("config")
@@ -15,32 +17,40 @@ def merge_providers(base: list[Provider], override: list[Provider]) -> list[Prov
     return list(by_name.values())
 
 
-def load_config(path: Path) -> list[Provider]:
+def default_config() -> Config:
+    return Config(common=list(DEFAULT_COMMON), providers=[])
+
+
+def load_config(path: Path) -> Config:
     try:
         with path.open("r") as file:
             data = yaml.safe_load(file) or {}
     except FileNotFoundError:
         logger.info(f"Config file {path} not found; using empty provider config")
-        return []
+        return default_config()
 
     if not data:
-        return []
+        return default_config()
     if "providers" not in data:
         raise KeyError(f"Config file {path} is missing required 'providers' key")
 
-    return [
-        Provider(
-            name=entry["name"],
-            path=Path(entry["path"]),
-            files=list(entry["files"]),
-        )
-        for entry in data["providers"]
-    ]
+    return Config(
+        common=list(data.get("common", DEFAULT_COMMON)),
+        providers=[
+            Provider(
+                name=entry["name"],
+                path=Path(entry["path"]),
+                files=list(entry["files"]),
+            )
+            for entry in data["providers"]
+        ],
+    )
 
 
-def save_config(path: Path, providers: list[Provider]) -> None:
-    merged = merge_providers(supported_providers, providers)
+def save_config(path: Path, config: Config) -> None:
+    merged = merge_providers(supported_providers, config.providers)
     payload = {
+        "common": list(config.common),
         "providers": [
             {
                 "name": provider.name,
@@ -48,7 +58,7 @@ def save_config(path: Path, providers: list[Provider]) -> None:
                 "files": list(provider.files),
             }
             for provider in merged
-        ]
+        ],
     }
 
     path.parent.mkdir(parents=True, exist_ok=True)
