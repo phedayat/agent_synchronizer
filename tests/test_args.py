@@ -1,7 +1,6 @@
 import pytest
 
 from agent_sync.args import parse_args
-from agent_sync.settings import DEFAULT_TARGETS
 
 
 def test_parse_args_defaults(monkeypatch):
@@ -10,7 +9,7 @@ def test_parse_args_defaults(monkeypatch):
     args = parse_args()
 
     assert args.repo_root == "/repo"
-    assert args.targets == DEFAULT_TARGETS
+    assert args.targets is None
     assert args.dry_run is False
     assert args.sync_report is False
     assert args.verbose is False
