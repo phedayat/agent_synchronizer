@@ -16,8 +16,8 @@ requires = ["uv_build>=0.11.11,<0.12"]
 build-backend = "uv_build"
 
 [project.urls]
-Repository = "https://github.com/phedayat/agent-synchronizer"
-"Bug Tracker" = "https://github.com/phedayat/agent-synchronizer/issues"
+Repository = "https://github.com/phedayat/agent_synchronizer"
+"Bug Tracker" = "https://github.com/phedayat/agent_synchronizer/issues"
 
 [dependency-groups]
 dev = [
