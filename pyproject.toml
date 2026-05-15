@@ -1,6 +1,6 @@
 [project]
 name = "agent-synchronizer"
-version = "0.1.0"
+version = "0.2.1"
 description = "Synchronize agent files across providers"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -14,6 +14,10 @@ agent-synchronizer = "agent_synchronizer.__main__:cli"
 [build-system]
 requires = ["uv_build>=0.11.11,<0.12"]
 build-backend = "uv_build"
+
+[project.urls]
+Repository = "https://github.com/phedayat/agent-synchronizer"
+"Bug Tracker" = "https://github.com/phedayat/agent-synchronizer/issues"
 
 [dependency-groups]
 dev = [
