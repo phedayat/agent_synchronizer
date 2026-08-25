@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent_synchronizer import sync_engine
-from agent_synchronizer.providers import Provider
 
 
 def test_approve_true_when_input_is_y():
@@ -13,49 +12,6 @@ def test_approve_true_when_input_is_y():
 def test_approve_false_for_non_y_response():
     with patch("builtins.input", return_value="n"):
         assert sync_engine._approve("Proceed") is False
-
-
-def test_enumerate_targets_builds_shared_targets_for_each_provider(tmp_path: Path):
-    repo = tmp_path / "repo"
-    cursor_provider = Provider(name="cursor", path=tmp_path / "cursor", files=[])
-    claude_provider = Provider(name="claude", path=tmp_path / "claude", files=[])
-
-    targets = ["AGENTS.md", "skills"]
-
-    expected = sync_engine.enumerate_targets(
-        [cursor_provider, claude_provider], targets, repo
-    )
-
-    assert expected == [
-        (
-            cursor_provider,
-            cursor_provider.path / "AGENTS.md",
-            repo / "AGENTS.md",
-            False,
-        ),
-        (cursor_provider, cursor_provider.path / "skills", repo / "skills", False),
-        (
-            claude_provider,
-            claude_provider.path / "AGENTS.md",
-            repo / "AGENTS.md",
-            False,
-        ),
-        (claude_provider, claude_provider.path / "skills", repo / "skills", False),
-    ]
-
-
-def test_enumerate_targets_puts_provider_specific_targets_under_provider_dir(
-    tmp_path: Path,
-):
-    repo = tmp_path / "repo"
-    provider = Provider(name="codex", path=tmp_path / "codex", files=["config.toml"])
-
-    expected = sync_engine.enumerate_targets([provider], ["AGENTS.md"], repo)
-
-    assert expected == [
-        (provider, provider.path / "AGENTS.md", repo / "AGENTS.md", False),
-        (provider, provider.path / "config.toml", repo / "codex" / "config.toml", True),
-    ]
 
 
 def test_move_noop_when_source_is_symlink(tmp_path: Path):
@@ -86,7 +42,7 @@ def test_move_noop_when_destination_exists(tmp_path: Path):
 
 def test_move_calls_move_when_approved(tmp_path: Path):
     src = tmp_path / "src"
-    dest = tmp_path / "dest"
+    dest = tmp_path / "nested" / "dest"
 
     with (
         patch.object(sync_engine, "_approve", return_value=True),
@@ -98,6 +54,7 @@ def test_move_calls_move_when_approved(tmp_path: Path):
 
     move_mock.assert_called_once_with(src, dest)
     copy_mock.assert_not_called()
+    assert dest.parent.exists()
 
 
 def test_move_calls_copy_when_not_approved(tmp_path: Path):
@@ -139,18 +96,6 @@ def test_symlink_noop_when_destination_already_correct(tmp_path: Path):
     info.assert_called_once()
 
 
-def test_symlink_noop_when_destination_exists_and_is_not_symlink(tmp_path: Path):
-    src = tmp_path / "src"
-    src.mkdir()
-    dest = tmp_path / "dest"
-    dest.mkdir()
-
-    with patch.object(sync_engine.logger, "info") as info:
-        sync_engine.symlink(src, dest)
-
-    info.assert_called_once()
-
-
 def test_symlink_creates_link_when_valid(tmp_path: Path):
     src = tmp_path / "src"
     src.mkdir()
@@ -162,39 +107,141 @@ def test_symlink_creates_link_when_valid(tmp_path: Path):
     assert dest.resolve() == src.resolve()
 
 
-def test_generate_sync_report_contains_counts_and_entries(tmp_path: Path):
-    cursor_provider = Provider(name="cursor", path=tmp_path / "cursor", files=[])
-    codex_provider = Provider(
-        name="codex", path=tmp_path / "codex", files=["config.toml"]
-    )
-    repo = tmp_path / "repo"
-    expected = [
-        (
-            cursor_provider,
-            cursor_provider.path / "AGENTS.md",
-            repo / "AGENTS.md",
-            False,
-        ),
-        (
-            codex_provider,
-            codex_provider.path / "config.toml",
-            repo / "codex" / "config.toml",
-            True,
-        ),
-    ]
+def test_symlink_replaces_real_dir_when_approved(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "existing").touch()
 
-    report = sync_engine.generate_sync_report(expected)
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.symlink(src, dest)
 
-    assert "Provider: cursor" in report
-    assert "Provider: codex" in report
-    assert "Specific: False" in report
-    assert "Specific: True" in report
-    assert f"Source: {cursor_provider.path / 'AGENTS.md'}" in report
-    assert f"Dest: {repo / 'AGENTS.md'}" in report
-    assert f"Source: {codex_provider.path / 'config.toml'}" in report
-    assert f"Dest: {repo / 'codex' / 'config.toml'}" in report
-    assert "Total files: 2" in report
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
 
 
-def test_generate_sync_report_returns_no_files_found_when_empty():
-    assert sync_engine.generate_sync_report([]) == "No files found"
+def test_symlink_replaces_real_file_when_approved(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    dest = tmp_path / "dest"
+    dest.write_text("real file")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.symlink(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
+
+
+def test_symlink_leaves_real_dest_when_declined(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    dest = tmp_path / "dest"
+    dest.mkdir()
+
+    with patch.object(sync_engine, "_approve", return_value=False):
+        sync_engine.symlink(src, dest)
+
+    assert not dest.is_symlink()
+    assert dest.is_dir()
+
+
+def test_absorb_moves_missing_children_only(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "shared.txt").write_text("in src")
+
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "shared.txt").write_text("in dest")
+    (dest / "unique.txt").write_text("only in dest")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine._absorb(src, dest)
+
+    assert (src / "unique.txt").read_text() == "only in dest"
+    assert (src / "shared.txt").read_text() == "in src"
+    assert not (dest / "unique.txt").exists()
+    assert (dest / "shared.txt").exists()
+
+
+def test_absorb_is_one_level_only(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+
+    dest = tmp_path / "dest"
+    nested = dest / "child" / "grandchild"
+    nested.mkdir(parents=True)
+    (nested / "leaf.txt").write_text("leaf")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine._absorb(src, dest)
+
+    assert (src / "child" / "grandchild" / "leaf.txt").read_text() == "leaf"
+    assert not (dest / "child").exists()
+
+
+def test_sync_target_noop_when_dest_is_symlink(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    dest = tmp_path / "dest"
+    dest.symlink_to(src, target_is_directory=True)
+
+    with patch.object(sync_engine, "_absorb") as absorb_mock:
+        sync_engine.sync_target(src, dest)
+
+    absorb_mock.assert_not_called()
+    assert dest.resolve() == src.resolve()
+
+
+def test_sync_target_migrates_when_src_missing(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "file.txt").write_text("content")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.sync_target(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
+    assert (src / "file.txt").read_text() == "content"
+
+
+def test_sync_target_absorbs_then_symlinks_when_both_exist(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "shared.txt").write_text("in src")
+
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "unique.txt").write_text("only in dest")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.sync_target(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
+    assert (src / "unique.txt").read_text() == "only in dest"
+
+
+def test_sync_target_symlinks_directly_when_dest_missing(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    dest = tmp_path / "dest"
+
+    sync_engine.sync_target(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
+
+
+def test_sync_target_noop_when_neither_exists(tmp_path: Path):
+    src = tmp_path / "src"
+    dest = tmp_path / "dest"
+
+    sync_engine.sync_target(src, dest)
+
+    assert not dest.exists()
+    assert not src.exists()

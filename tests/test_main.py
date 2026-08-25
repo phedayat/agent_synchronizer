@@ -1,51 +1,35 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-import yaml
+import pytest
 
 from agent_synchronizer.__main__ import main
 
 
-def test_main_uses_config_common_when_targets_are_omitted(tmp_path):
+def test_main_calls_sync_once_per_harness(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                "common": ["shared"],
-                "providers": [
-                    {"name": "custom", "path": str(tmp_path / "custom"), "files": []}
-                ],
-            }
-        )
-    )
 
-    with patch(
-        "agent_synchronizer.__main__.enumerate_targets", return_value=[]
-    ) as enumerate_mock:
-        main(None, True, False, False, str(repo), str(config_path), False)
+    harness_instance = MagicMock()
+    harness_cls = MagicMock(return_value=harness_instance)
+    harness_instance.name = "fake"
 
-    assert enumerate_mock.call_args.args[1] == ["shared"]
+    with patch("agent_synchronizer.__main__.ALL_HARNESSES", [harness_cls]):
+        main(str(repo))
+
+    harness_cls.assert_called_once_with(repo)
+    harness_instance.sync.assert_called_once()
 
 
-def test_main_targets_override_config_common(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                "common": ["shared"],
-                "providers": [
-                    {"name": "custom", "path": str(tmp_path / "custom"), "files": []}
-                ],
-            }
-        )
-    )
+def test_main_raises_when_repo_root_missing(tmp_path):
+    missing = tmp_path / "missing"
 
-    with patch(
-        "agent_synchronizer.__main__.enumerate_targets", return_value=[]
-    ) as enumerate_mock:
-        main(["override"], True, False, False, str(repo), str(config_path), False)
+    with pytest.raises(FileNotFoundError):
+        main(str(missing))
 
-    assert enumerate_mock.call_args.args[1] == ["override"]
+
+def test_main_raises_when_repo_root_not_a_dir(tmp_path):
+    file_path = tmp_path / "not_a_dir"
+    file_path.write_text("content")
+
+    with pytest.raises(NotADirectoryError):
+        main(str(file_path))
