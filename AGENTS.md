@@ -20,23 +20,20 @@
 ## Standard Commands
 
 - Run CLI: `uv run agent-synchronizer <repo_root>`
-- Available flags:
-  - `--targets`
-  - `--dry-run`
-  - `--sync-report`
-  - `--verbose`
-  - `--config`
-  - `--save-config`
+- No flags; `repo_root` is the only argument.
 
-## Config Usage
+## Harnesses
 
-- Config file format: YAML with a top-level `providers` key containing provider objects (`name`, `path`, `files`).
-- Loading config: `--config <path>` loads providers from that YAML and merges them with `supported_providers` by provider `name`.
-- Missing config file: loading a non-existent `--config` path is supported and treated as an empty provider config.
-- Empty config file/object: treated as no configured providers.
-- Invalid config shape: if a config file exists but omits the `providers` key, raise an error.
-- Saving config: `--save-config` writes merged providers (defaults + loaded config) to `--config`; loaded config providers win on name conflicts.
-- `--save-config` requires `--config <path>` so there is an explicit destination file.
+- Each harness (`claude`, `codex`, `cursor`, `opencode`) is a fixed class in
+  `src/agent_synchronizer/harnesses.py` implementing the `Harness` ABC
+  (`sync_skills`, `sync_subagents`, `sync_config`, `sync_rules`).
+- `Harness.sync()` calls all four methods in sequence; there is no per-method CLI flag.
+- Skills and subagents sync from `<repo_root>/common/skills` and
+  `<repo_root>/common/agents` for every harness. Config and rules are
+  per-harness (`<repo_root>/<harness>/...`), except Claude/Codex/OpenCode's
+  rules, which also come from `common/` (`AGENTS.md`/`CLAUDE.md` per the
+  mapping in `harnesses.py`).
+- `Cursor.sync_config()` is a documented no-op — Cursor has no config file to sync today.
 
 ## Testing
 
@@ -44,10 +41,10 @@
 - Run all tests: `uv run pytest`.
 - Run a single file:
   - `uv run pytest tests/test_args.py`
-  - `uv run pytest tests/test_config.py`
+  - `uv run pytest tests/test_harnesses.py`
   - `uv run pytest tests/test_logging.py`
   - `uv run pytest tests/test_sync_engine.py`
-- Keep tests focused and minimal; prefer unit tests for argument parsing, config loading/merging, logging behavior, and provider filesystem flow.
+- Keep tests focused and minimal; prefer unit tests for argument parsing, harness sync-target mapping, logging behavior, and filesystem sync flow.
 
 ## Development Rules
 
@@ -56,8 +53,8 @@
 - If dependencies change, update lockfile with `uv lock`.
 - Prefer `pathlib` and explicit path handling over string path manipulation.
 - Log important file operations; avoid silent destructive behavior.
-- To add a provider, create a new `Provider` instance in `src/agent_sync/providers.py` with the provider `name`, `path`, and `files`, then append that instance to the `supported_providers` list. `Provider` itself is defined in `src/agent_sync/types.py`.
-- Keep sync flow explicit: use `enumerate_targets` (in `src/agent_sync/sync_engine.py`) to build expected `(provider, source, dest, specific)` entries, then `_move_files` and `_symlink_files` (in `src/agent_sync/__main__.py`) to move existing sources into the repo and link provider paths back to repo destinations. Use `generate_sync_report` to render the `--sync-report` output from those expected entries.
+- To add a harness, define a new `Harness` subclass in `src/agent_synchronizer/harnesses.py` implementing the four `sync_*` methods, then add it to `ALL_HARNESSES`.
+- Keep sync flow explicit: each harness's `sync_*` method calls `sync_engine.sync_target(src, dest)` for its specific path pair. `sync_target` uses `_absorb` to reconcile dest-only content into the repo before calling `symlink`; `move` relocates whole subtrees.
 
 ## Safety for File Operations
 
@@ -70,7 +67,7 @@
 
 - Make the smallest change that solves the task.
 - Do not refactor unrelated code.
-- Keep naming consistent with current codebase (`providers`, `supported_providers`, `enumerate_targets`, `move`, `symlink`, `generate_sync_report`, `_move_files`, `_symlink_files`, `merge_providers`, `load_config`, `save_config`).
+- Keep naming consistent with current codebase (`Harness`, `ALL_HARNESSES`, `sync_target`, `_absorb`, `symlink`, `move`).
 - Update documentation when behavior or commands change.
 
 ## Quick Task Checklist

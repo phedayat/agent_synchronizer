@@ -11,33 +11,35 @@ uv add agent-synchronizer
 ## Usage
 
 ```shell
-uv run agent-synchronizer <central_repo> \
-    --config <config_path> \
-    --save-config \
-    --sync-report \
-    --verbose \
+uv run agent-synchronizer <repo_root>
 ```
 
-## Config
+## Repository Layout
 
-```yaml
-common:
-  - AGENTS.md
-  - skills
-  - agents
-providers:
-  - name: codex
-    path: /Users/me/.codex
-    files:
-      - config.toml
+```
+<repo_root>/
+├── common/
+│   ├── skills/
+│   ├── agents/
+│   └── AGENTS.md
+├── claude/
+│   ├── CLAUDE.md
+│   └── settings.json
+├── codex/
+│   └── config.toml
+├── cursor/
+│   └── .cursorrules
+└── opencode/
+    └── opencode.jsonc
 ```
 
-`common` lists files and directories synced for every provider. Provider `files` are
-synced under that provider's directory in the central repo.
+`common/` holds skills, subagents, and rules shared across harnesses. Each
+harness's own directory holds files specific to it (config, and for Claude
+and Cursor, rules).
 
-## OOTB Providers
+## Supported Harnesses
 
-We use the `$HOME`-based config directories for each provider.
+We use the `$HOME`-based config directories for each harness.
 
 - Claude
 - Codex
