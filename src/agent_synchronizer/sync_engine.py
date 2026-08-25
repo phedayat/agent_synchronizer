@@ -1,27 +1,13 @@
+import shutil
 from pathlib import Path
 
-from .providers import Provider
 from .utils.logging import Logger
-from .types import Expected
 
 logger = Logger("sync_engine", verbose=True)
 
 
 def _approve(message: str) -> bool:
     return input(message + " (y/n): ").strip().lower() == "y"
-
-
-def enumerate_targets(
-    providers: list[Provider], targets: list[str], repo: Path
-) -> Expected:
-    expected = []
-    for provider in providers:
-        for target in targets + provider.files:
-            specific = target in provider.files
-            source = provider.path / target
-            dest = repo / provider.name / target if specific else repo / target
-            expected.append((provider, source, dest, specific))
-    return expected
 
 
 def move(src: Path, dest: Path):
@@ -36,6 +22,7 @@ def move(src: Path, dest: Path):
         logger.info(f"Destination path {dest} already exists.")
         return
 
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if _approve(f"Do you want to move {src}?"):
         logger.info(f"Moving {src} to {dest}")
         src.move(dest)
@@ -52,17 +39,38 @@ def symlink(src: Path, dest: Path):
         logger.info(f"Symlink already correct: {dest} -> {src}")
         return
     elif dest.exists():
-        logger.info(f"Destination path {dest} already exists and is not a symlink.")
-        return
+        if not _approve(f"Replace existing {dest} with a symlink to {src}?"):
+            logger.info(f"Leaving {dest} in place.")
+            return
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        else:
+            dest.unlink()
 
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.symlink_to(src, target_is_directory=src.is_dir())
 
 
-def generate_sync_report(expected: Expected):
-    report = ""
-    if not expected:
-        return "No files found"
-    for provider, source, dest, specific in expected:
-        report += f"Provider: {provider.name}, Source: {source}, Dest: {dest}, Specific: {specific}\n"
-    report += f"Total files: {len(expected)}\n"
-    return report
+def _absorb(src: Path, dest: Path):
+    """Move each direct child of dest missing from src into src, one level deep."""
+    if not dest.exists() or dest.is_symlink():
+        return
+    existing = {child.name for child in src.iterdir()} if src.exists() else set()
+    for child in dest.iterdir():
+        if child.name not in existing:
+            move(child, src / child.name)
+
+
+def sync_target(src: Path, dest: Path):
+    if dest.is_symlink():
+        logger.info(f"Destination path {dest} is already a symlink.")
+        return
+    if dest.exists() and not src.exists():
+        move(dest, src)
+        symlink(src, dest)
+        return
+    if dest.exists() and src.exists():
+        _absorb(src, dest)
+        symlink(src, dest)
+        return
+    symlink(src, dest)
