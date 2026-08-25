@@ -13,7 +13,14 @@ mkdir -p "$HOME/.claude/skills/bar"
 echo "unique-claude-md-content" >"$HOME/.claude/CLAUDE.md"
 
 cd "$(dirname "$0")/.."
+set +o pipefail
 yes y | uv run agent-synchronizer "$REPO"
+status=${PIPESTATUS[1]}
+set -o pipefail
+[ "$status" -eq 0 ] || {
+    echo "FAIL: agent-synchronizer exited $status" >&2
+    exit 1
+}
 
 fail() {
     echo "FAIL: $1" >&2
