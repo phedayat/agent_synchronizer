@@ -79,9 +79,7 @@ class Codex(Harness):
         )
 
     def sync_rules(self) -> None:
-        sync_engine.sync_target(
-            self.common_dir / "AGENTS.md", self.home / "AGENTS.md"
-        )
+        sync_engine.sync_target(self.common_dir / "AGENTS.md", self.home / "AGENTS.md")
 
 
 class Cursor(Harness):
@@ -125,9 +123,7 @@ class OpenCode(Harness):
         )
 
     def sync_rules(self) -> None:
-        sync_engine.sync_target(
-            self.common_dir / "AGENTS.md", self.home / "AGENTS.md"
-        )
+        sync_engine.sync_target(self.common_dir / "AGENTS.md", self.home / "AGENTS.md")
 
 
 ALL_HARNESSES: list[type[Harness]] = [Claude, Codex, Cursor, OpenCode]
