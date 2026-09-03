@@ -1,8 +1,24 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from agent_synchronizer.__main__ import main
+
+
+def test_main_resolves_relative_repo_root(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    harness_instance = MagicMock()
+    harness_cls = MagicMock(return_value=harness_instance)
+    harness_instance.name = "fake"
+
+    with patch("agent_synchronizer.__main__.ALL_HARNESSES", [harness_cls]):
+        main(os.path.join(".", "repo"))
+
+    harness_cls.assert_called_once_with(repo.resolve())
 
 
 def test_main_calls_sync_once_per_harness(tmp_path):

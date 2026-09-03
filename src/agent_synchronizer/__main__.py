@@ -8,7 +8,7 @@ logger = Logger("main", verbose=True)
 
 
 def main(repo_root: str) -> None:
-    repo = Path(repo_root)
+    repo = Path(repo_root).resolve()
     if not repo.exists():
         logger.error(f"Repository root {repo} does not exist")
         raise FileNotFoundError(f"Repository root {repo} does not exist")
