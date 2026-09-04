@@ -21,13 +21,16 @@
 
 - Run CLI: `uv run agent-synchronizer <repo_root>`
 - No flags; `repo_root` is the only argument.
+- Before considering any change complete, run `make prepare` (lint, format, typecheck, test) and ensure it passes.
 
 ## Harnesses
 
 - Each harness (`claude`, `codex`, `cursor`, `opencode`) is a fixed class in
   `src/agent_synchronizer/harnesses.py` implementing the `Harness` ABC
-  (`sync_skills`, `sync_subagents`, `sync_config`, `sync_rules`).
-- `Harness.sync()` calls all four methods in sequence; there is no per-method CLI flag.
+  (`sync_skills`, `sync_subagents`, `sync_config`, `sync_rules`, `sync_hooks`).
+- `Harness.sync()` calls all five methods in sequence; there is no per-method CLI flag.
+- Only Claude syncs hooks today (`<repo_root>/claude/hooks` → `~/.claude/hooks`);
+  `sync_hooks()` is a documented no-op for Codex, Cursor, and OpenCode.
 - Skills and subagents sync from `<repo_root>/common/skills` and
   `<repo_root>/common/agents` for every harness. Config and rules are
   per-harness (`<repo_root>/<harness>/...`), except Claude/Codex/OpenCode's
@@ -53,7 +56,8 @@
 - If dependencies change, update lockfile with `uv lock`.
 - Prefer `pathlib` and explicit path handling over string path manipulation.
 - Log important file operations; avoid silent destructive behavior.
-- To add a harness, define a new `Harness` subclass in `src/agent_synchronizer/harnesses.py` implementing the four `sync_*` methods, then add it to `ALL_HARNESSES`.
+- To add a harness, define a new `Harness` subclass in `src/agent_synchronizer/harnesses.py` implementing the five `sync_*` methods, then add it to `ALL_HARNESSES`.
+- Every new feature (method, function, class, or CLI behavior) must ship with an associated unit test in the same change, without exception.
 - Keep sync flow explicit: each harness's `sync_*` method calls `sync_engine.sync_target(src, dest)` for its specific path pair. `sync_target` uses `_absorb` to reconcile dest-only content into the repo before calling `symlink`; `move` relocates whole subtrees.
 
 ## Safety for File Operations

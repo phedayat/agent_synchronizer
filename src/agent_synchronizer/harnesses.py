@@ -31,11 +31,15 @@ class Harness(ABC):
     @abstractmethod
     def sync_rules(self) -> None: ...
 
+    @abstractmethod
+    def sync_hooks(self) -> None: ...
+
     def sync(self) -> None:
         self.sync_skills()
         self.sync_subagents()
         self.sync_config()
         self.sync_rules()
+        self.sync_hooks()
 
 
 class Claude(Harness):
@@ -59,6 +63,9 @@ class Claude(Harness):
     def sync_rules(self) -> None:
         sync_engine.sync_target(self.repo_dir / "CLAUDE.md", self.home / "CLAUDE.md")
 
+    def sync_hooks(self) -> None:
+        sync_engine.sync_target(self.repo_dir / "hooks", self.home / "hooks")
+
 
 class Codex(Harness):
     name = "codex"
@@ -80,6 +87,9 @@ class Codex(Harness):
 
     def sync_rules(self) -> None:
         sync_engine.sync_target(self.common_dir / "AGENTS.md", self.home / "AGENTS.md")
+
+    def sync_hooks(self) -> None:
+        pass
 
 
 class Cursor(Harness):
@@ -103,6 +113,9 @@ class Cursor(Harness):
             self.repo_dir / ".cursorrules", self.home / ".cursorrules"
         )
 
+    def sync_hooks(self) -> None:
+        pass
+
 
 class OpenCode(Harness):
     name = "opencode"
@@ -124,6 +137,9 @@ class OpenCode(Harness):
 
     def sync_rules(self) -> None:
         sync_engine.sync_target(self.common_dir / "AGENTS.md", self.home / "AGENTS.md")
+
+    def sync_hooks(self) -> None:
+        pass
 
 
 ALL_HARNESSES: list[type[Harness]] = [Claude, Codex, Cursor, OpenCode]

@@ -31,12 +31,14 @@ def test_claude_sync_targets(tmp_path):
         harness.sync_subagents()
         harness.sync_config()
         harness.sync_rules()
+        harness.sync_hooks()
 
     mock.assert_any_call(tmp_path / "common" / "skills", home / "skills")
     mock.assert_any_call(tmp_path / "common" / "agents", home / "agents")
     mock.assert_any_call(tmp_path / "claude" / "settings.json", home / "settings.json")
     mock.assert_any_call(tmp_path / "claude" / "CLAUDE.md", home / "CLAUDE.md")
-    assert mock.call_count == 4
+    mock.assert_any_call(tmp_path / "claude" / "hooks", home / "hooks")
+    assert mock.call_count == 5
 
 
 def test_codex_sync_targets(tmp_path):
@@ -82,6 +84,33 @@ def test_cursor_sync_config_is_noop(tmp_path):
     mock.assert_not_called()
 
 
+def test_codex_sync_hooks_is_noop(tmp_path):
+    harness = Codex(tmp_path)
+
+    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+        harness.sync_hooks()
+
+    mock.assert_not_called()
+
+
+def test_cursor_sync_hooks_is_noop(tmp_path):
+    harness = Cursor(tmp_path)
+
+    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+        harness.sync_hooks()
+
+    mock.assert_not_called()
+
+
+def test_opencode_sync_hooks_is_noop(tmp_path):
+    harness = OpenCode(tmp_path)
+
+    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+        harness.sync_hooks()
+
+    mock.assert_not_called()
+
+
 def test_opencode_sync_targets(tmp_path):
     home = tmp_path / "home" / "opencode"
     harness = OpenCode(tmp_path)
@@ -102,7 +131,7 @@ def test_opencode_sync_targets(tmp_path):
     assert mock.call_count == 4
 
 
-def test_sync_calls_all_four_methods(tmp_path):
+def test_sync_calls_all_five_methods(tmp_path):
     harness = Claude(tmp_path)
 
     with (
@@ -110,6 +139,7 @@ def test_sync_calls_all_four_methods(tmp_path):
         patch.object(harness, "sync_subagents") as subagents,
         patch.object(harness, "sync_config") as config,
         patch.object(harness, "sync_rules") as rules,
+        patch.object(harness, "sync_hooks") as hooks,
     ):
         harness.sync()
 
@@ -117,3 +147,4 @@ def test_sync_calls_all_four_methods(tmp_path):
     subagents.assert_called_once()
     config.assert_called_once()
     rules.assert_called_once()
+    hooks.assert_called_once()

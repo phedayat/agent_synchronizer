@@ -24,7 +24,8 @@ uv run agent-synchronizer <repo_root>
 │   └── AGENTS.md
 ├── claude/
 │   ├── CLAUDE.md
-│   └── settings.json
+│   ├── settings.json
+│   └── hooks/
 ├── codex/
 │   └── config.toml
 ├── cursor/
