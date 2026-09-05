@@ -19,8 +19,14 @@ class Harness(ABC):
     def common_dir(self) -> Path:
         return self.repo / "common"
 
-    @abstractmethod
-    def sync_skills(self) -> None: ...
+    @property
+    def skills_dir(self) -> Path:
+        return self.repo_dir / "skills"
+
+    def sync_skills(self) -> None:
+        sync_engine.sync_flattened_skills(
+            self.home / "skills", self.common_dir / "skills", self.skills_dir
+        )
 
     @abstractmethod
     def sync_subagents(self) -> None: ...
@@ -49,9 +55,6 @@ class Claude(Harness):
         super().__init__(repo)
         self.home = Path.home() / ".claude"
 
-    def sync_skills(self) -> None:
-        sync_engine.sync_target(self.common_dir / "skills", self.home / "skills")
-
     def sync_subagents(self) -> None:
         sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
 
@@ -73,9 +76,6 @@ class Codex(Harness):
     def __init__(self, repo: Path):
         super().__init__(repo)
         self.home = Path.home() / ".codex"
-
-    def sync_skills(self) -> None:
-        sync_engine.sync_target(self.common_dir / "skills", self.home / "skills")
 
     def sync_subagents(self) -> None:
         sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
@@ -99,9 +99,6 @@ class Cursor(Harness):
         super().__init__(repo)
         self.home = Path.home() / ".cursor"
 
-    def sync_skills(self) -> None:
-        sync_engine.sync_target(self.common_dir / "skills", self.home / "skills")
-
     def sync_subagents(self) -> None:
         sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
 
@@ -123,9 +120,6 @@ class OpenCode(Harness):
     def __init__(self, repo: Path):
         super().__init__(repo)
         self.home = Path.home() / ".config" / "opencode"
-
-    def sync_skills(self) -> None:
-        sync_engine.sync_target(self.common_dir / "skills", self.home / "skills")
 
     def sync_subagents(self) -> None:
         sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
