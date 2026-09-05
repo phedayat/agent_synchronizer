@@ -19,21 +19,9 @@ echo "# skill_21 (common)" >"$REPO/common/skills/skill_21/SKILL.md"
 mkdir -p "$REPO/claude/skills/skill_11"
 echo "# skill_11 (claude override)" >"$REPO/claude/skills/skill_11/SKILL.md"
 
-cd "$(dirname "$0")/.."
+(cd "$(dirname "$0")/.." && go build -o "$WORKDIR/agent-synchronizer" ./cmd/agent-synchronizer)
 
-uv run python - "$REPO" "$HOME_DIR" <<'PY'
-import sys
-from pathlib import Path
-
-from agent_synchronizer.harnesses import Claude
-
-repo = Path(sys.argv[1])
-home = Path(sys.argv[2])
-
-harness = Claude(repo)
-harness.home = home / ".claude"
-harness.sync_skills()
-PY
+HOME="$HOME_DIR" "$WORKDIR/agent-synchronizer" "$REPO"
 
 fail() {
     echo "FAIL: $1" >&2
