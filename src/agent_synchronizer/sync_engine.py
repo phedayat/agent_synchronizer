@@ -12,8 +12,8 @@ def _approve(message: str) -> bool:
 
 def move(src: Path, dest: Path):
     """
-    Moves the directory 'src' to 'dest'.
-    If 'dest' exists, raises an exception.
+    Moves the file or directory 'src' to 'dest'.
+    If 'dest' already exists, logs the fact and returns without moving.
     """
     if src.is_symlink():
         logger.info(f"Source path {src} is a symlink.")
@@ -53,14 +53,27 @@ def symlink(src: Path, dest: Path):
     dest.symlink_to(src, target_is_directory=src.is_dir())
 
 
-def _absorb(src: Path, dest: Path):
-    """Move each direct child of dest missing from src into src, one level deep."""
-    if not dest.exists() or dest.is_symlink():
-        return
-    existing = {child.name for child in src.iterdir()} if src.exists() else set()
+def _absorb(src: Path, dest: Path) -> bool:
+    """Move each direct child of dest missing from src into src, one level deep.
+
+    Returns False if any child could not be fully absorbed (e.g. its move was
+    declined and it remains in place at dest), meaning dest still holds real
+    content and must not be destroyed by a subsequent symlink() call.
+    """
+    if not dest.exists() or dest.is_symlink() or not dest.is_dir():
+        return True
+    existing = (
+        {child.name for child in src.iterdir()}
+        if src.exists() and src.is_dir()
+        else set()
+    )
+    fully_absorbed = True
     for child in dest.iterdir():
         if child.name not in existing:
             move(child, src / child.name)
+            if child.exists():
+                fully_absorbed = False
+    return fully_absorbed
 
 
 def sync_target(src: Path, dest: Path):
@@ -72,8 +85,10 @@ def sync_target(src: Path, dest: Path):
         symlink(src, dest)
         return
     if dest.exists() and src.exists():
-        _absorb(src, dest)
-        symlink(src, dest)
+        if _absorb(src, dest):
+            symlink(src, dest)
+        else:
+            logger.info(f"Leaving {dest} in place: not fully absorbed into {src}.")
         return
     symlink(src, dest)
 

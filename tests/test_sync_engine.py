@@ -73,6 +73,45 @@ def test_move_calls_copy_when_not_approved(tmp_path: Path):
     move_mock.assert_not_called()
 
 
+def test_move_noop_when_destination_is_existing_file(tmp_path: Path):
+    src = tmp_path / "src.txt"
+    src.write_text("source")
+    dest = tmp_path / "dest.txt"
+    dest.write_text("dest")
+
+    with patch.object(sync_engine.logger, "info") as info:
+        sync_engine.move(src, dest)
+
+    info.assert_called_once()
+    assert dest.read_text() == "dest"
+    assert src.read_text() == "source"
+
+
+def test_move_file_calls_move_when_approved(tmp_path: Path):
+    src = tmp_path / "src.txt"
+    src.write_text("content")
+    dest = tmp_path / "nested" / "dest.txt"
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.move(src, dest)
+
+    assert not src.exists()
+    assert dest.read_text() == "content"
+
+
+def test_move_file_calls_copy_when_not_approved(tmp_path: Path):
+    src = tmp_path / "src.txt"
+    src.write_text("content")
+    dest = tmp_path / "dest.txt"
+
+    with patch.object(sync_engine, "_approve", return_value=False):
+        sync_engine.move(src, dest)
+
+    assert src.exists()
+    assert src.read_text() == "content"
+    assert dest.read_text() == "content"
+
+
 def test_symlink_noop_when_source_missing(tmp_path: Path):
     src = tmp_path / "missing"
     dest = tmp_path / "dest"
@@ -163,6 +202,21 @@ def test_symlink_leaves_real_dest_when_declined(tmp_path: Path):
     assert dest.is_dir()
 
 
+def test_symlink_leaves_stale_symlink_when_declined(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    old_target = tmp_path / "old_target"
+    old_target.mkdir()
+    dest = tmp_path / "dest"
+    dest.symlink_to(old_target, target_is_directory=True)
+
+    with patch.object(sync_engine, "_approve", return_value=False):
+        sync_engine.symlink(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == old_target.resolve()
+
+
 def test_absorb_moves_missing_children_only(tmp_path: Path):
     src = tmp_path / "src"
     src.mkdir()
@@ -196,6 +250,35 @@ def test_absorb_is_one_level_only(tmp_path: Path):
 
     assert (src / "child" / "grandchild" / "leaf.txt").read_text() == "leaf"
     assert not (dest / "child").exists()
+
+
+def test_absorb_declined_child_stays_in_dest_and_reports_incomplete(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "unique.txt").write_text("only in dest")
+
+    with patch.object(sync_engine, "_approve", return_value=False):
+        result = sync_engine._absorb(src, dest)
+
+    assert result is False
+    assert (dest / "unique.txt").read_text() == "only in dest"
+    assert (src / "unique.txt").read_text() == "only in dest"
+
+
+def test_absorb_both_files_is_noop_and_reports_fully_absorbed(tmp_path: Path):
+    src = tmp_path / "src.txt"
+    src.write_text("src content")
+    dest = tmp_path / "dest.txt"
+    dest.write_text("dest content")
+
+    result = sync_engine._absorb(src, dest)
+
+    assert result is True
+    assert src.read_text() == "src content"
+    assert dest.read_text() == "dest content"
 
 
 def test_absorb_noop_when_dest_missing(tmp_path: Path):
@@ -277,6 +360,45 @@ def test_sync_target_symlinks_directly_when_dest_missing(tmp_path: Path):
 
     assert dest.is_symlink()
     assert dest.resolve() == src.resolve()
+
+
+def test_sync_target_both_plain_files_does_not_raise(tmp_path: Path):
+    src = tmp_path / "config.toml"
+    src.write_text("in repo")
+    dest = tmp_path / "config_home.toml"
+    dest.write_text("in home")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.sync_target(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
+    assert src.read_text() == "in repo"
+
+
+def test_sync_target_declined_absorb_child_is_not_destroyed_by_symlink(
+    tmp_path: Path,
+):
+    """Regression test: declining a child's absorb must stick even if the
+    subsequent symlink-replace prompt would have been approved."""
+    src = tmp_path / "src"
+    src.mkdir()
+
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "unique.txt").write_text("only in dest")
+
+    # First prompt (absorbing "unique.txt") is declined; any later prompt
+    # (e.g. symlink's replace-dest confirmation) would be approved.
+    with (
+        patch.object(sync_engine, "_approve", side_effect=[False, True, True]),
+        patch.object(sync_engine, "symlink") as symlink_mock,
+    ):
+        sync_engine.sync_target(src, dest)
+
+    symlink_mock.assert_not_called()
+    assert dest.is_dir()
+    assert (dest / "unique.txt").read_text() == "only in dest"
 
 
 def test_sync_target_noop_when_neither_exists(tmp_path: Path):
