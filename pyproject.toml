@@ -1,12 +1,10 @@
 [project]
 name = "agent-synchronizer"
-version = "0.2.2"
+version = "0.3.0"
 description = "Synchronize agent files across providers"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = [
-    "pyyaml>=6.0",
-]
+dependencies = []
 
 [project.scripts]
 agent-synchronizer = "agent_synchronizer.__main__:cli"
