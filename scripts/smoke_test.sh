@@ -27,14 +27,15 @@ fail() {
     exit 1
 }
 
-[ -d "$REPO/common/skills/bar" ] || fail "bar/ was not moved into common/skills/"
+[ -d "$REPO/claude/skills/bar" ] || fail "bar/ was not absorbed into claude/skills/"
 
 [ -L "$HOME/.claude/CLAUDE.md" ] || fail "claude/CLAUDE.md is not a symlink"
 [ "$(readlink "$HOME/.claude/CLAUDE.md")" = "$REPO/claude/CLAUDE.md" ] \
     || fail "claude/CLAUDE.md does not point at the repo"
 
-[ -L "$HOME/.claude/skills" ] || fail "common/skills/ is not symlinked from the harness side"
-[ "$(readlink "$HOME/.claude/skills")" = "$REPO/common/skills" ] \
-    || fail "claude/skills does not point at common/skills/"
+[ ! -L "$HOME/.claude/skills" ] || fail "skills/ should be a real directory of per-skill symlinks, not a whole-directory symlink"
+[ -L "$HOME/.claude/skills/bar" ] || fail "bar is not symlinked under skills/"
+[ "$(readlink "$HOME/.claude/skills/bar")" = "$REPO/claude/skills/bar" ] \
+    || fail "skills/bar does not point at claude/skills/bar"
 
 echo "OK"
