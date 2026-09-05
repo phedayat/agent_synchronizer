@@ -26,19 +26,26 @@ def test_claude_sync_targets(tmp_path):
     harness = Claude(tmp_path)
     harness.home = home
 
-    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+    with (
+        patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock,
+        patch(
+            "agent_synchronizer.harnesses.sync_engine.sync_flattened_skills"
+        ) as skills_mock,
+    ):
         harness.sync_skills()
         harness.sync_subagents()
         harness.sync_config()
         harness.sync_rules()
         harness.sync_hooks()
 
-    mock.assert_any_call(tmp_path / "common" / "skills", home / "skills")
+    skills_mock.assert_called_once_with(
+        home / "skills", tmp_path / "common" / "skills", tmp_path / "claude" / "skills"
+    )
     mock.assert_any_call(tmp_path / "common" / "agents", home / "agents")
     mock.assert_any_call(tmp_path / "claude" / "settings.json", home / "settings.json")
     mock.assert_any_call(tmp_path / "claude" / "CLAUDE.md", home / "CLAUDE.md")
     mock.assert_any_call(tmp_path / "claude" / "hooks", home / "hooks")
-    assert mock.call_count == 5
+    assert mock.call_count == 4
 
 
 def test_codex_sync_targets(tmp_path):
@@ -46,17 +53,24 @@ def test_codex_sync_targets(tmp_path):
     harness = Codex(tmp_path)
     harness.home = home
 
-    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+    with (
+        patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock,
+        patch(
+            "agent_synchronizer.harnesses.sync_engine.sync_flattened_skills"
+        ) as skills_mock,
+    ):
         harness.sync_skills()
         harness.sync_subagents()
         harness.sync_config()
         harness.sync_rules()
 
-    mock.assert_any_call(tmp_path / "common" / "skills", home / "skills")
+    skills_mock.assert_called_once_with(
+        home / "skills", tmp_path / "common" / "skills", tmp_path / "codex" / "skills"
+    )
     mock.assert_any_call(tmp_path / "common" / "agents", home / "agents")
     mock.assert_any_call(tmp_path / "codex" / "config.toml", home / "config.toml")
     mock.assert_any_call(tmp_path / "common" / "AGENTS.md", home / "AGENTS.md")
-    assert mock.call_count == 4
+    assert mock.call_count == 3
 
 
 def test_cursor_sync_targets(tmp_path):
@@ -64,15 +78,22 @@ def test_cursor_sync_targets(tmp_path):
     harness = Cursor(tmp_path)
     harness.home = home
 
-    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+    with (
+        patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock,
+        patch(
+            "agent_synchronizer.harnesses.sync_engine.sync_flattened_skills"
+        ) as skills_mock,
+    ):
         harness.sync_skills()
         harness.sync_subagents()
         harness.sync_rules()
 
-    mock.assert_any_call(tmp_path / "common" / "skills", home / "skills")
+    skills_mock.assert_called_once_with(
+        home / "skills", tmp_path / "common" / "skills", tmp_path / "cursor" / "skills"
+    )
     mock.assert_any_call(tmp_path / "common" / "agents", home / "agents")
     mock.assert_any_call(tmp_path / "cursor" / ".cursorrules", home / ".cursorrules")
-    assert mock.call_count == 3
+    assert mock.call_count == 2
 
 
 def test_cursor_sync_config_is_noop(tmp_path):
@@ -116,19 +137,28 @@ def test_opencode_sync_targets(tmp_path):
     harness = OpenCode(tmp_path)
     harness.home = home
 
-    with patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock:
+    with (
+        patch("agent_synchronizer.harnesses.sync_engine.sync_target") as mock,
+        patch(
+            "agent_synchronizer.harnesses.sync_engine.sync_flattened_skills"
+        ) as skills_mock,
+    ):
         harness.sync_skills()
         harness.sync_subagents()
         harness.sync_config()
         harness.sync_rules()
 
-    mock.assert_any_call(tmp_path / "common" / "skills", home / "skills")
+    skills_mock.assert_called_once_with(
+        home / "skills",
+        tmp_path / "common" / "skills",
+        tmp_path / "opencode" / "skills",
+    )
     mock.assert_any_call(tmp_path / "common" / "agents", home / "agents")
     mock.assert_any_call(
         tmp_path / "opencode" / "opencode.jsonc", home / "opencode.jsonc"
     )
     mock.assert_any_call(tmp_path / "common" / "AGENTS.md", home / "AGENTS.md")
-    assert mock.call_count == 4
+    assert mock.call_count == 3
 
 
 def test_sync_calls_all_five_methods(tmp_path):
