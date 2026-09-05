@@ -47,10 +47,10 @@ func collectSkills(sources ...string) map[string]string {
 	return skills
 }
 
-// syncFlattenedSkills flattens one or more (possibly grouped) skill source
+// SyncFlattenedSkills flattens one or more (possibly grouped) skill source
 // roots into dest, so every skill directory sits directly under dest.
 // Mirrors sync_engine.py's sync_flattened_skills.
-func syncFlattenedSkills(dest string, sources ...string) error {
+func SyncFlattenedSkills(dest string, sources ...string) error {
 	desired := collectSkills(sources...)
 
 	if isSymlink(dest) {

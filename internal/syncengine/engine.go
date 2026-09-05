@@ -276,8 +276,8 @@ func absorb(src, dest string) (bool, error) {
 	return fullyAbsorbed, nil
 }
 
-// syncTarget mirrors sync_engine.py's sync_target(src, dest).
-func syncTarget(src, dest string) error {
+// SyncTarget mirrors sync_engine.py's sync_target(src, dest).
+func SyncTarget(src, dest string) error {
 	if isSymlink(dest) {
 		logger.Info(fmt.Sprintf("Destination path %s is already a symlink.", dest))
 		return nil

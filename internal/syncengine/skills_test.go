@@ -102,7 +102,7 @@ func TestSyncFlattenedSkillsSymlinksEachSkillDirectlyUnderDest(t *testing.T) {
 	skillA := filepath.Join(src, "skill-a")
 	mkSkill(t, skillA)
 
-	if err := syncFlattenedSkills(dest, src); err != nil {
+	if err := SyncFlattenedSkills(dest, src); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +124,7 @@ func TestSyncFlattenedSkillsHarnessSpecificOverridesCommon(t *testing.T) {
 	mkSkill(t, commonSkill)
 	mkSkill(t, harnessSkill)
 
-	if err := syncFlattenedSkills(dest, common, harness); err != nil {
+	if err := SyncFlattenedSkills(dest, common, harness); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,7 +148,7 @@ func TestSyncFlattenedSkillsAbsorbsUnmanagedRealDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncFlattenedSkills(dest, src); err != nil {
+	if err := SyncFlattenedSkills(dest, src); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,12 +171,12 @@ func TestSyncFlattenedSkillsLeavesCorrectSymlinkAlone(t *testing.T) {
 	skillA := filepath.Join(src, "skill-a")
 	mkSkill(t, skillA)
 
-	if err := syncFlattenedSkills(dest, src); err != nil {
+	if err := SyncFlattenedSkills(dest, src); err != nil {
 		t.Fatal(err)
 	}
 	// Second call: dest/skill-a is already a correct symlink -> skipped in
 	// the absorb loop, then symlink() itself no-ops since it's already correct.
-	if err := syncFlattenedSkills(dest, src); err != nil {
+	if err := SyncFlattenedSkills(dest, src); err != nil {
 		t.Fatal(err)
 	}
 
@@ -219,7 +219,7 @@ func TestSyncFlattenedSkillsErrorsWhenRemovingStaleSymlinkFails(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(parent, 0o755) })
 
-	if err := syncFlattenedSkills(dest, src); err == nil {
+	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when removing stale symlink fails")
 	}
 }
@@ -235,7 +235,7 @@ func TestSyncFlattenedSkillsErrorsWhenMkdirDestFails(t *testing.T) {
 	}
 	dest := filepath.Join(blockingFile, "skills")
 
-	if err := syncFlattenedSkills(dest, src); err == nil {
+	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when dest cannot be created")
 	}
 }
@@ -250,7 +250,7 @@ func TestSyncFlattenedSkillsErrorsWhenReadDirDestFails(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(dest, 0o755) })
 
-	if err := syncFlattenedSkills(dest, src); err == nil {
+	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when dest cannot be read")
 	}
 }
@@ -270,7 +270,7 @@ func TestSyncFlattenedSkillsErrorsWhenMoveFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncFlattenedSkills(dest, lastSource); err == nil {
+	if err := SyncFlattenedSkills(dest, lastSource); err == nil {
 		t.Fatal("expected error when move fails")
 	}
 }
@@ -285,7 +285,7 @@ func TestSyncFlattenedSkillsErrorsWhenSymlinkFails(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(dest, 0o755) })
 
-	if err := syncFlattenedSkills(dest, src); err == nil {
+	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when symlink creation fails")
 	}
 }
@@ -301,7 +301,7 @@ func TestSyncFlattenedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncFlattenedSkills(dest, src); err != nil {
+	if err := SyncFlattenedSkills(dest, src); err != nil {
 		t.Fatal(err)
 	}
 
@@ -327,7 +327,7 @@ func TestSyncFlattenedSkillsRebuildsStaleWholeDirSymlink(t *testing.T) {
 		t.Fatalf("setup: expected %s to be a symlink", dest)
 	}
 
-	if err := syncFlattenedSkills(dest, src); err != nil {
+	if err := SyncFlattenedSkills(dest, src); err != nil {
 		t.Fatal(err)
 	}
 

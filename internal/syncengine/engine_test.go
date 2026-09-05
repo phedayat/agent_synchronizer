@@ -471,7 +471,7 @@ func TestAbsorbDeclinedChildStaysInDestAndReportsIncomplete(t *testing.T) {
 	}
 }
 
-// --- syncTarget ---
+// --- SyncTarget ---
 
 func TestSyncTargetNoopWhenDestIsSymlink(t *testing.T) {
 	tmp := t.TempDir()
@@ -482,7 +482,7 @@ func TestSyncTargetNoopWhenDestIsSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if resolve(dest) != resolve(src) {
@@ -498,7 +498,7 @@ func TestSyncTargetMigratesWhenSrcMissing(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dest, "file.txt"), "content")
 
 	withStdin(t, "y\n")
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if !isSymlink(dest) || resolve(dest) != resolve(src) {
@@ -520,7 +520,7 @@ func TestSyncTargetAbsorbsThenSymlinksWhenBothExist(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dest, "unique.txt"), "only in dest")
 
 	withStdin(t, "y\ny\n")
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if !isSymlink(dest) || resolve(dest) != resolve(src) {
@@ -539,7 +539,7 @@ func TestSyncTargetBothPlainFilesDoesNotRaise(t *testing.T) {
 	mustWriteFile(t, dest, "in home")
 
 	withStdin(t, "y\n")
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if !isSymlink(dest) || resolve(dest) != resolve(src) {
@@ -561,7 +561,7 @@ func TestSyncTargetDeclinedAbsorbChildIsNotDestroyedBySymlink(t *testing.T) {
 
 	// Decline the absorb prompt; any later prompt would be approved.
 	withStdin(t, "n\ny\ny\n")
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if isSymlink(dest) {
@@ -581,7 +581,7 @@ func TestSyncTargetSymlinksDirectlyWhenDestMissing(t *testing.T) {
 	mustMkdir(t, src)
 	dest := filepath.Join(tmp, "dest")
 
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if !isSymlink(dest) || resolve(dest) != resolve(src) {
@@ -594,7 +594,7 @@ func TestSyncTargetNoopWhenNeitherExists(t *testing.T) {
 	src := filepath.Join(tmp, "src")
 	dest := filepath.Join(tmp, "dest")
 
-	if err := syncTarget(src, dest); err != nil {
+	if err := SyncTarget(src, dest); err != nil {
 		t.Fatal(err)
 	}
 	if exists(dest) || exists(src) {
@@ -989,7 +989,7 @@ func TestSyncTargetPropagatesAbsorbError(t *testing.T) {
 	mustMkdir(t, dest)
 	withUnreadableDir(t, dest)
 
-	if err := syncTarget(src, dest); err == nil {
+	if err := SyncTarget(src, dest); err == nil {
 		t.Fatal("expected error propagated from absorb")
 	}
 }
@@ -1005,7 +1005,7 @@ func TestSyncTargetPropagatesMoveError(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dest, "file.txt"), "content")
 
 	withStdin(t, "y\n")
-	if err := syncTarget(src, dest); err == nil {
+	if err := SyncTarget(src, dest); err == nil {
 		t.Fatal("expected error propagated from move when migrating dest into a read-only src parent")
 	}
 }
