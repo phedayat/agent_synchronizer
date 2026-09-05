@@ -28,8 +28,8 @@ class Harness(ABC):
             self.home / "skills", self.common_dir / "skills", self.skills_dir
         )
 
-    @abstractmethod
-    def sync_subagents(self) -> None: ...
+    def sync_subagents(self) -> None:
+        sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
 
     @abstractmethod
     def sync_config(self) -> None: ...
@@ -37,8 +37,8 @@ class Harness(ABC):
     @abstractmethod
     def sync_rules(self) -> None: ...
 
-    @abstractmethod
-    def sync_hooks(self) -> None: ...
+    def sync_hooks(self) -> None:
+        pass
 
     def sync(self) -> None:
         self.sync_skills()
@@ -54,9 +54,6 @@ class Claude(Harness):
     def __init__(self, repo: Path):
         super().__init__(repo)
         self.home = Path.home() / ".claude"
-
-    def sync_subagents(self) -> None:
-        sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
 
     def sync_config(self) -> None:
         sync_engine.sync_target(
@@ -77,9 +74,6 @@ class Codex(Harness):
         super().__init__(repo)
         self.home = Path.home() / ".codex"
 
-    def sync_subagents(self) -> None:
-        sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
-
     def sync_config(self) -> None:
         sync_engine.sync_target(
             self.repo_dir / "config.toml", self.home / "config.toml"
@@ -87,9 +81,6 @@ class Codex(Harness):
 
     def sync_rules(self) -> None:
         sync_engine.sync_target(self.common_dir / "AGENTS.md", self.home / "AGENTS.md")
-
-    def sync_hooks(self) -> None:
-        pass
 
 
 class Cursor(Harness):
@@ -99,9 +90,6 @@ class Cursor(Harness):
         super().__init__(repo)
         self.home = Path.home() / ".cursor"
 
-    def sync_subagents(self) -> None:
-        sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
-
     def sync_config(self) -> None:
         pass
 
@@ -109,9 +97,6 @@ class Cursor(Harness):
         sync_engine.sync_target(
             self.repo_dir / ".cursorrules", self.home / ".cursorrules"
         )
-
-    def sync_hooks(self) -> None:
-        pass
 
 
 class OpenCode(Harness):
@@ -121,9 +106,6 @@ class OpenCode(Harness):
         super().__init__(repo)
         self.home = Path.home() / ".config" / "opencode"
 
-    def sync_subagents(self) -> None:
-        sync_engine.sync_target(self.common_dir / "agents", self.home / "agents")
-
     def sync_config(self) -> None:
         sync_engine.sync_target(
             self.repo_dir / "opencode.jsonc", self.home / "opencode.jsonc"
@@ -131,9 +113,6 @@ class OpenCode(Harness):
 
     def sync_rules(self) -> None:
         sync_engine.sync_target(self.common_dir / "AGENTS.md", self.home / "AGENTS.md")
-
-    def sync_hooks(self) -> None:
-        pass
 
 
 ALL_HARNESSES: list[type[Harness]] = [Claude, Codex, Cursor, OpenCode]
