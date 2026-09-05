@@ -134,6 +134,22 @@ def test_symlink_replaces_real_file_when_approved(tmp_path: Path):
     assert dest.resolve() == src.resolve()
 
 
+def test_symlink_replaces_stale_symlink_to_dir_when_approved(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    old_target = tmp_path / "old_target"
+    old_target.mkdir()
+    dest = tmp_path / "dest"
+    dest.symlink_to(old_target, target_is_directory=True)
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.symlink(src, dest)
+
+    assert dest.is_symlink()
+    assert dest.resolve() == src.resolve()
+    assert old_target.is_dir()
+
+
 def test_symlink_leaves_real_dest_when_declined(tmp_path: Path):
     src = tmp_path / "src"
     src.mkdir()
@@ -180,6 +196,32 @@ def test_absorb_is_one_level_only(tmp_path: Path):
 
     assert (src / "child" / "grandchild" / "leaf.txt").read_text() == "leaf"
     assert not (dest / "child").exists()
+
+
+def test_absorb_noop_when_dest_missing(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    dest = tmp_path / "dest"
+
+    sync_engine._absorb(src, dest)
+
+    assert not dest.exists()
+    assert list(src.iterdir()) == []
+
+
+def test_absorb_noop_when_dest_is_symlink(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "leaf.txt").write_text("leaf")
+    dest = tmp_path / "dest"
+    dest.symlink_to(real, target_is_directory=True)
+
+    sync_engine._absorb(src, dest)
+
+    assert list(src.iterdir()) == []
+    assert (real / "leaf.txt").exists()
 
 
 def test_sync_target_noop_when_dest_is_symlink(tmp_path: Path):
@@ -245,3 +287,139 @@ def test_sync_target_noop_when_neither_exists(tmp_path: Path):
 
     assert not dest.exists()
     assert not src.exists()
+
+
+def _make_skill(root: Path, *parts: str):
+    skill_dir = root.joinpath(*parts)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(f"# {parts[-1]}")
+    return skill_dir
+
+
+def test_iter_skill_dirs_finds_top_level_skill(tmp_path: Path):
+    root = tmp_path / "skills"
+    _make_skill(root, "skill_a")
+
+    found = list(sync_engine._iter_skill_dirs(root))
+
+    assert found == [root / "skill_a"]
+
+
+def test_iter_skill_dirs_finds_grouped_skill(tmp_path: Path):
+    root = tmp_path / "skills"
+    _make_skill(root, "group_1", "skill_a")
+
+    found = list(sync_engine._iter_skill_dirs(root))
+
+    assert found == [root / "group_1" / "skill_a"]
+
+
+def test_iter_skill_dirs_finds_arbitrarily_nested_skill(tmp_path: Path):
+    root = tmp_path / "skills"
+    _make_skill(root, "group_1", "group_2", "skill_a")
+
+    found = list(sync_engine._iter_skill_dirs(root))
+
+    assert found == [root / "group_1" / "group_2" / "skill_a"]
+
+
+def test_iter_skill_dirs_stops_descending_once_matched(tmp_path: Path):
+    root = tmp_path / "skills"
+    skill = _make_skill(root, "skill_a")
+    (skill / "nested_dir").mkdir()
+    (skill / "nested_dir" / "SKILL.md").write_text("should not be found")
+
+    found = list(sync_engine._iter_skill_dirs(root))
+
+    assert found == [skill]
+
+
+def test_iter_skill_dirs_missing_root_yields_nothing(tmp_path: Path):
+    found = list(sync_engine._iter_skill_dirs(tmp_path / "missing"))
+
+    assert found == []
+
+
+def test_collect_skills_merges_sources_last_wins(tmp_path: Path):
+    common = tmp_path / "common"
+    override = tmp_path / "override"
+    common_skill = _make_skill(common, "shared")
+    override_skill = _make_skill(override, "shared")
+    only_common = _make_skill(common, "only_common")
+
+    skills = sync_engine._collect_skills(common, override)
+
+    assert skills == {"shared": override_skill, "only_common": only_common}
+    assert common_skill != override_skill
+
+
+def test_sync_flattened_skills_symlinks_each_skill_directly_under_dest(
+    tmp_path: Path,
+):
+    common = tmp_path / "common"
+    _make_skill(common, "group_1", "skill_a")
+    _make_skill(common, "skill_b")
+    dest = tmp_path / "dest"
+
+    sync_engine.sync_flattened_skills(dest, common)
+
+    assert (dest / "skill_a").resolve() == (common / "group_1" / "skill_a").resolve()
+    assert (dest / "skill_b").resolve() == (common / "skill_b").resolve()
+    assert not (dest / "group_1").exists()
+
+
+def test_sync_flattened_skills_harness_specific_overrides_common(tmp_path: Path):
+    common = tmp_path / "common"
+    override = tmp_path / "override"
+    _make_skill(common, "skill_a")
+    override_skill = _make_skill(override, "skill_a")
+    dest = tmp_path / "dest"
+
+    sync_engine.sync_flattened_skills(dest, common, override)
+
+    assert (dest / "skill_a").resolve() == override_skill.resolve()
+
+
+def test_sync_flattened_skills_absorbs_unmanaged_real_dir(tmp_path: Path):
+    common = tmp_path / "common"
+    override = tmp_path / "override"
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "manual_skill").mkdir()
+    (dest / "manual_skill" / "SKILL.md").write_text("manual")
+
+    with patch.object(sync_engine, "_approve", return_value=True):
+        sync_engine.sync_flattened_skills(dest, common, override)
+
+    assert (dest / "manual_skill").is_symlink()
+    assert (dest / "manual_skill").resolve() == (override / "manual_skill").resolve()
+    assert (override / "manual_skill" / "SKILL.md").exists()
+
+
+def test_sync_flattened_skills_leaves_correct_symlink_alone(tmp_path: Path):
+    common = tmp_path / "common"
+    skill = _make_skill(common, "skill_a")
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    (dest / "skill_a").symlink_to(skill, target_is_directory=True)
+
+    with patch.object(sync_engine.logger, "info") as info:
+        sync_engine.sync_flattened_skills(dest, common)
+
+    assert (dest / "skill_a").resolve() == skill.resolve()
+    assert any("already correct" in call.args[0] for call in info.call_args_list)
+
+
+def test_sync_flattened_skills_rebuilds_stale_whole_dir_symlink(tmp_path: Path):
+    common = tmp_path / "common"
+    _make_skill(common, "skill_a")
+    old_target = tmp_path / "old_common_skills"
+    old_target.mkdir()
+    dest = tmp_path / "dest"
+    dest.symlink_to(old_target, target_is_directory=True)
+
+    sync_engine.sync_flattened_skills(dest, common)
+
+    assert not dest.is_symlink()
+    assert dest.is_dir()
+    assert (dest / "skill_a").resolve() == (common / "skill_a").resolve()
