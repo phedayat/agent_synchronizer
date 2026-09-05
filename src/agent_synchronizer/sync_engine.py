@@ -42,7 +42,9 @@ def symlink(src: Path, dest: Path):
         if not _approve(f"Replace existing {dest} with a symlink to {src}?"):
             logger.info(f"Leaving {dest} in place.")
             return
-        if dest.is_dir():
+        if dest.is_symlink():
+            dest.unlink()
+        elif dest.is_dir():
             shutil.rmtree(dest)
         else:
             dest.unlink()
@@ -74,3 +76,50 @@ def sync_target(src: Path, dest: Path):
         symlink(src, dest)
         return
     symlink(src, dest)
+
+
+def _iter_skill_dirs(root: Path):
+    """Yield every directory under root that directly contains SKILL.md,
+    at any depth, without descending into a directory once matched."""
+    if not root.exists():
+        return
+    if (root / "SKILL.md").exists():
+        yield root
+        return
+    for child in sorted(p for p in root.iterdir() if p.is_dir()):
+        yield from _iter_skill_dirs(child)
+
+
+def _collect_skills(*sources: Path) -> dict[str, Path]:
+    """Map skill name -> directory across sources, later sources win."""
+    skills: dict[str, Path] = {}
+    for source in sources:
+        for skill_dir in _iter_skill_dirs(source):
+            skills[skill_dir.name] = skill_dir
+    return skills
+
+
+def sync_flattened_skills(dest: Path, *sources: Path) -> None:
+    """
+    Flattens one or more (possibly grouped) skill source roots into dest,
+    so every skill directory sits directly under dest. Sources are merged
+    in order; a same-named skill in a later source overrides an earlier one
+    entirely. Real, unmanaged content already at dest is absorbed into the
+    last source before being symlinked back (mirrors sync_target's
+    onboarding behavior, applied per-skill instead of per-directory).
+    """
+    desired = _collect_skills(*sources)
+
+    if dest.is_symlink():
+        dest.unlink()
+    dest.mkdir(parents=True, exist_ok=True)
+
+    for child in list(dest.iterdir()):
+        if child.name in desired or child.is_symlink():
+            continue
+        target = sources[-1] / child.name
+        move(child, target)
+        desired[child.name] = target
+
+    for name, src in desired.items():
+        symlink(src, dest / name)
