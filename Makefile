@@ -1,3 +1,6 @@
+build:
+	go build -o bin/agent-synchronizer ./cmd/agent-synchronizer
+
 clean:
 	rm -rf bin dist .goreleaser-dist
 	go clean ./...
