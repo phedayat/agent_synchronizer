@@ -198,7 +198,7 @@ func TestIterSkillDirsErrorsWhenReadDirFails(t *testing.T) {
 	if err := os.Chmod(blocked, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(blocked, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o755) })
 
 	if got := iterSkillDirs(blocked); got != nil {
 		t.Fatalf("expected nil on ReadDir error, got %v", got)
@@ -217,7 +217,7 @@ func TestSyncFlattenedSkillsErrorsWhenRemovingStaleSymlinkFails(t *testing.T) {
 	if err := os.Chmod(parent, 0o555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(parent, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
 
 	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when removing stale symlink fails")
@@ -248,7 +248,7 @@ func TestSyncFlattenedSkillsErrorsWhenReadDirDestFails(t *testing.T) {
 	if err := os.Chmod(dest, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dest, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
 
 	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when dest cannot be read")
@@ -283,7 +283,7 @@ func TestSyncFlattenedSkillsErrorsWhenSymlinkFails(t *testing.T) {
 	if err := os.Chmod(dest, 0o555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dest, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
 
 	if err := SyncFlattenedSkills(dest, src); err == nil {
 		t.Fatal("expected error when symlink creation fails")
