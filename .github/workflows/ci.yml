@@ -14,24 +14,28 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: "3.14"
+          go-version: "1.26.5"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: false
+      - name: Build
+        run: go build ./...
 
-      - name: Run tests
-        run: uv run pytest -sv
+      - name: Vet
+        run: go vet ./...
 
-      - name: Run Ruff check
-        run: uvx ruff check .
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
 
-      - name: Run Ruff format
-        run: uvx ruff format --check .
+      - name: Lint
+        run: go tool golangci-lint run
 
-      - name: Run ty
-        run: uvx ty check .
+      - name: Test
+        run: go test ./... -coverprofile=coverage.out
+
+      - name: Enforce 100% coverage
+        run: |
+          total=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $NF}' | tr -d '%')
+          echo "Total coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit !(t >= 100.0) }'
