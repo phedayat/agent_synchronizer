@@ -1,3 +1,7 @@
 # Build outputs
 build/
 dist/
+bin/
+
+docs/
+.claude/
