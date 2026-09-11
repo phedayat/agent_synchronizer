@@ -1,22 +1,20 @@
+build:
+	go build -o bin/agent-synchronizer ./cmd/agent-synchronizer
+
 clean:
-	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
-	
-	rm -rf build
-	rm -rf dist
-	rm -rf *.egg-info
-	rm -rf .pytest_cache
-	rm -rf .ruff_cache
+	rm -rf bin dist .goreleaser-dist
+	go clean ./...
 
 test:
-	uv run pytest -sv
+	go test ./... -v -cover
 
 lint:
-	uvx ruff check --fix .
+	go tool golangci-lint run --fix ./...
 
 format:
-	uvx ruff format .
+	gofmt -w .
 
 typecheck:
-	uvx ty check .
+	go build ./...
 
 prepare: lint format typecheck test

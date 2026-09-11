@@ -14,67 +14,82 @@
 
 ## Tooling
 
-- Use `uv` for all Python workflows in this repository.
-- Do not use `pip`, `pipenv`, `poetry`, or bare `python`/`pytest` when `uv` equivalents exist.
+- Use the Go toolchain (`go build`, `go test`, `go vet`, `gofmt`) and the
+  `Makefile` targets for all workflows in this repository.
+- No third-party build tool is required; do not introduce one.
 
 ## Standard Commands
 
-- Run CLI: `uv run agent-synchronizer <repo_root>`
+- Run CLI (development): `go run ./cmd/agent-synchronizer <repo_root>`
+- Run CLI (built binary): `go build -o bin/agent-synchronizer ./cmd/agent-synchronizer && ./bin/agent-synchronizer <repo_root>`
 - No flags; `repo_root` is the only argument.
 - Before considering any change complete, run `make prepare` (lint, format, typecheck, test) and ensure it passes.
 
 ## Harnesses
 
-- Each harness (`claude`, `codex`, `cursor`, `opencode`) is a fixed class in
-  `src/agent_synchronizer/harnesses.py` implementing the `Harness` ABC
-  (`sync_skills`, `sync_subagents`, `sync_config`, `sync_rules`, `sync_hooks`).
-- `Harness.sync()` calls all five methods in sequence; there is no per-method CLI flag.
+- Every harness (`claude`, `codex`, `cursor`, `opencode`) is a value of the
+  single config-driven `Harness` struct in `internal/harness/harness.go`,
+  not a separate class per harness. Per-harness constructors
+  (`NewClaude`, `NewCodex`, `NewCursor`, `NewOpenCode`) populate its fields
+  (`ConfigSrc`/`ConfigDest`, `RulesSrc`/`RulesDest`, `HooksSrc`/`HooksDest`);
+  an empty source field means that step is a no-op for that harness.
+  `Harness.Sync()` calls `SyncSkills`, `SyncSubagents`, `SyncConfig`,
+  `SyncRules`, `SyncHooks` in sequence; there is no per-method CLI flag.
 - Only Claude syncs hooks today (`<repo_root>/claude/hooks` → `~/.claude/hooks`);
-  `sync_hooks()` is a documented no-op for Codex, Cursor, and OpenCode.
+  `SyncHooks()` is a no-op for Codex, Cursor, and OpenCode (empty `HooksSrc`).
 - Subagents sync from `<repo_root>/common/agents` for every harness. Config
   and rules are per-harness (`<repo_root>/<harness>/...`), except
   Claude/Codex/OpenCode's rules, which also come from `common/`
-  (`AGENTS.md`/`CLAUDE.md` per the mapping in `harnesses.py`).
+  (`AGENTS.md`/`CLAUDE.md` per the mapping in the `New*` constructors in
+  `internal/harness/harness.go`).
 - Skills are flattened: `<repo_root>/common/skills` may group skills into
   subfolders any number of levels deep (a directory is a skill once it
   directly contains `SKILL.md`), and `<repo_root>/<harness>/skills` holds
   optional harness-specific skills, overriding a same-named common skill
-  outright. `Harness.sync_skills()` calls
-  `sync_engine.sync_flattened_skills(dest, *sources)` to place every skill
+  outright. `Harness.SyncSkills()` calls
+  `syncengine.SyncFlattenedSkills(dest, *sources)` to place every skill
   directly under `<home>/skills`, regardless of how it's grouped in the
   repo. Unlike every other sync target, `<home>/skills` itself is a real
   directory (not a symlink) — each skill inside it is its own symlink,
   since a single symlink can't point at a flattened, merged view of
   multiple source directories.
-- `Cursor.sync_config()` is a documented no-op — Cursor has no config file to sync today.
+- Cursor's `ConfigSrc`/`ConfigDest` are left empty, so `SyncConfig()` is a
+  no-op — Cursor has no config file to sync today.
 
 ## Testing
 
-- Test framework: `pytest`.
-- Run all tests: `uv run pytest`.
-- Run a single file:
-  - `uv run pytest tests/test_args.py`
-  - `uv run pytest tests/test_harnesses.py`
-  - `uv run pytest tests/test_logging.py`
-  - `uv run pytest tests/test_main.py`
-  - `uv run pytest tests/test_sync_engine.py`
+- Test framework: Go's standard `testing` package.
+- Run all tests: `go test ./...` (or `make test` for `-v -cover`).
+- Run a single package's tests:
+  - `go test ./internal/synclog/...`
+  - `go test ./internal/syncengine/...`
+  - `go test ./internal/harness/...`
+  - `go test ./cmd/agent-synchronizer/...`
 - Keep tests focused and minimal; prefer unit tests for argument parsing, harness sync-target mapping, logging behavior, and filesystem sync flow.
-- Every line and branch of `src/agent_synchronizer/` must be covered by a
-  unit test — including edge cases and failure modes, not just the happy
-  path. Check with `uv run --with coverage coverage run --branch -m pytest
-  -q && uv run --with coverage coverage report -m --include="src/*"`
-  before considering a change complete.
+- Every line and branch of the codebase must be covered by a unit test —
+  including edge cases and failure modes, not just the happy path. CI
+  enforces 100% total coverage; check locally with `go test ./...
+  -coverprofile=coverage.out && go tool cover -func=coverage.out` before
+  considering a change complete.
 
 ## Development Rules
 
-- Respect `pyproject.toml` and `uv.lock` as source-of-truth for dependencies.
-- Keep `requires-python` compatibility intact.
-- If dependencies change, update lockfile with `uv lock`.
-- Prefer `pathlib` and explicit path handling over string path manipulation.
+- Respect `go.mod` and `go.sum` as source-of-truth for dependencies.
+- Keep the `go.mod` Go-version requirement intact.
+- If dependencies change, update `go.sum` with `go mod tidy`.
+- Prefer `path/filepath` and explicit path handling over string path manipulation.
 - Log important file operations; avoid silent destructive behavior.
-- To add a harness, define a new `Harness` subclass in `src/agent_synchronizer/harnesses.py` implementing the five `sync_*` methods, then add it to `ALL_HARNESSES`.
-- Every new feature (method, function, class, or CLI behavior) must ship with an associated unit test in the same change, without exception.
-- Keep sync flow explicit: each harness's `sync_*` method calls `sync_engine.sync_target(src, dest)` for its specific path pair. `sync_target` uses `_absorb` to reconcile dest-only content into the repo before calling `symlink`; `move` relocates whole subtrees. `sync_skills` is the one exception, calling `sync_engine.sync_flattened_skills(dest, *sources)` instead, since skills may be grouped in the repo but must land flat at the destination.
+- To add a harness, add a new `New*` constructor in
+  `internal/harness/harness.go` that builds a `Harness` value with the
+  right fields set, then add it to `AllHarnesses`.
+- Every new feature (method, function, type, or CLI behavior) must ship with an associated unit test in the same change, without exception.
+- Keep sync flow explicit: each harness's `Sync*` method calls
+  `syncengine.SyncTarget(src, dest)` for its specific path pair.
+  `SyncTarget` uses `absorb` to reconcile dest-only content into the repo
+  before calling `symlink`; `move` relocates whole subtrees. `SyncSkills`
+  is the one exception, calling `syncengine.SyncFlattenedSkills(dest,
+  *sources)` instead, since skills may be grouped in the repo but must
+  land flat at the destination.
 
 ## Safety for File Operations
 
@@ -88,13 +103,13 @@
 
 - Make the smallest change that solves the task.
 - Do not refactor unrelated code.
-- Keep naming consistent with current codebase (`Harness`, `ALL_HARNESSES`, `sync_target`, `_absorb`, `symlink`, `move`).
+- Keep naming consistent with current codebase (`Harness`, `AllHarnesses`, `SyncTarget`, `absorb`, `symlink`, `move`).
 - Update documentation when behavior or commands change.
 
 ## Quick Task Checklist
 
 - Confirm intent and scope.
-- Run/verify with `uv run ...`.
+- Run/verify with `go run ./cmd/agent-synchronizer <repo_root>`.
 - The CLI takes no flags (there is no dry-run mode); validate sync changes
   against a scratch `repo_root` and scratch `$HOME` (see
   `scripts/smoke_test.sh` and `tests/smoke_test_skills_flatten.sh` for the

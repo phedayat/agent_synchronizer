@@ -2,16 +2,20 @@
 
 CLI tool for syncing skills, subagents, AGENTS/CLAUDE.md and provider-specific files.
 
-## Install 
+## Install
+
+Download a prebuilt binary from
+[GitHub Releases](https://github.com/phedayat/agent_synchronizer/releases), or
+build from source with Go:
 
 ```shell
-uv add agent-synchronizer
+go install github.com/phedayat/agent_synchronizer/cmd/agent-synchronizer@latest
 ```
 
 ## Usage
 
 ```shell
-uv run agent-synchronizer <repo_root>
+agent-synchronizer <repo_root>
 ```
 
 ## Repository Layout

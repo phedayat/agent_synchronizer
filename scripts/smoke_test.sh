@@ -9,12 +9,17 @@ REPO="$WORKDIR/repo"
 export HOME="$WORKDIR/home"
 
 mkdir -p "$REPO"
+# Resolve symlinks (e.g. macOS /var -> /private/var) so string comparisons
+# against readlink output match the resolved paths the CLI stores.
+REPO="$(cd "$REPO" && pwd -P)"
 mkdir -p "$HOME/.claude/skills/bar"
 echo "unique-claude-md-content" >"$HOME/.claude/CLAUDE.md"
 
 cd "$(dirname "$0")/.."
+go build -o "$WORKDIR/agent-synchronizer" ./cmd/agent-synchronizer
+
 set +o pipefail
-yes y | uv run agent-synchronizer "$REPO"
+yes y | "$WORKDIR/agent-synchronizer" "$REPO"
 status=${PIPESTATUS[1]}
 set -o pipefail
 [ "$status" -eq 0 ] || {
