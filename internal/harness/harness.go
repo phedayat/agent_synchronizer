@@ -167,13 +167,29 @@ func NewOpenCode(repo string) *Harness {
 	}
 }
 
+func NewHermes(repo string) *Harness {
+	home := filepath.Join(userHomeDir(), ".hermes")
+	repoDir := filepath.Join(repo, "hermes")
+	return &Harness{
+		Name:                "hermes",
+		Home:                home,
+		RepoRoot:            repo,
+		ConfigSrc:           filepath.Join(repoDir, "config.json"),
+		ConfigDest:          filepath.Join(home, "config.json"),
+		RulesSrc:            filepath.Join(repo, "common", "AGENTS.md"),
+		RulesDest:           filepath.Join(home, "AGENTS.md"),
+		PreserveSkillGroups: true,
+	}
+}
+
 // AllHarnesses returns the fixed harness list, matching Python's
-// ALL_HARNESSES order: Claude, Codex, Cursor, OpenCode.
+// ALL_HARNESSES order: Claude, Codex, Cursor, OpenCode, Hermes.
 func AllHarnesses(repo string) []*Harness {
 	return []*Harness{
 		NewClaude(repo),
 		NewCodex(repo),
 		NewCursor(repo),
 		NewOpenCode(repo),
+		NewHermes(repo),
 	}
 }
