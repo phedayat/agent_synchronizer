@@ -38,6 +38,21 @@ func stubSync(t *testing.T) (*[]targetCall, *[]skillsCall) {
 	return &targetCalls, &skillsCalls
 }
 
+func stubPartiallyGroupedSkills(t *testing.T) *[]skillsCall {
+	t.Helper()
+	var calls []skillsCall
+
+	orig := syncPartiallyGroupedSkills
+	syncPartiallyGroupedSkills = func(dest, flattenSrc, groupedSrc string) error {
+		calls = append(calls, skillsCall{dest, []string{flattenSrc, groupedSrc}})
+		return nil
+	}
+	t.Cleanup(func() {
+		syncPartiallyGroupedSkills = orig
+	})
+	return &calls
+}
+
 func containsTarget(calls []targetCall, src, dest string) bool {
 	for _, c := range calls {
 		if c.src == src && c.dest == dest {
@@ -449,6 +464,7 @@ func TestConstructorsUseHomeDir(t *testing.T) {
 		{"codex", NewCodex(repo), filepath.Join(tmpHome, ".codex")},
 		{"cursor", NewCursor(repo), filepath.Join(tmpHome, ".cursor")},
 		{"opencode", NewOpenCode(repo), filepath.Join(tmpHome, ".config", "opencode")},
+		{"hermes", NewHermes(repo), filepath.Join(tmpHome, ".hermes")},
 	}
 	for _, c := range cases {
 		if c.h.Home != c.want {
@@ -461,14 +477,98 @@ func TestAllHarnesses(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	repo := "/repo"
 	got := AllHarnesses(repo)
-	if len(got) != 4 {
-		t.Fatalf("len = %d, want 4", len(got))
+	if len(got) != 5 {
+		t.Fatalf("len = %d, want 5", len(got))
 	}
-	wantNames := []string{"claude", "codex", "cursor", "opencode"}
+	wantNames := []string{"claude", "codex", "cursor", "opencode", "hermes"}
 	for i, name := range wantNames {
 		if got[i].Name != name {
 			t.Errorf("AllHarnesses()[%d].Name = %q, want %q", i, got[i].Name, name)
 		}
+	}
+}
+
+func TestSyncSkillsFlattenedWhenGroupsNotPreserved(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := "/repo"
+	h := NewClaude(repo)
+	home := h.Home
+
+	_, flatCalls := stubSync(t)
+	groupedCalls := stubPartiallyGroupedSkills(t)
+
+	if err := h.SyncSkills(); err != nil {
+		t.Fatal(err)
+	}
+
+	wantSkills := skillsCall{
+		dest:    filepath.Join(home, "skills"),
+		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "claude", "skills")},
+	}
+	if len(*flatCalls) != 1 || !reflect.DeepEqual((*flatCalls)[0], wantSkills) {
+		t.Fatalf("flattened skills call = %+v, want %+v", *flatCalls, wantSkills)
+	}
+	if len(*groupedCalls) != 0 {
+		t.Fatalf("expected no grouped skills calls, got %+v", *groupedCalls)
+	}
+}
+
+func TestSyncSkillsGroupedWhenPreserved(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := "/repo"
+	h := NewHermes(repo)
+	home := h.Home
+
+	_, flatCalls := stubSync(t)
+	groupedCalls := stubPartiallyGroupedSkills(t)
+
+	if err := h.SyncSkills(); err != nil {
+		t.Fatal(err)
+	}
+
+	wantSkills := skillsCall{
+		dest:    filepath.Join(home, "skills"),
+		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "hermes", "skills")},
+	}
+	if len(*groupedCalls) != 1 || !reflect.DeepEqual((*groupedCalls)[0], wantSkills) {
+		t.Fatalf("grouped skills call = %+v, want %+v", *groupedCalls, wantSkills)
+	}
+	if len(*flatCalls) != 0 {
+		t.Fatalf("expected no flattened skills calls, got %+v", *flatCalls)
+	}
+}
+
+func TestNewHermesConstructor(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	repo := "/repo"
+
+	h := NewHermes(repo)
+	home := filepath.Join(tmpHome, ".hermes")
+
+	if h.Home != home {
+		t.Errorf("Home = %q, want %q", h.Home, home)
+	}
+	if want := filepath.Join(repo, "hermes", "config.json"); h.ConfigSrc != want {
+		t.Errorf("ConfigSrc = %q, want %q", h.ConfigSrc, want)
+	}
+	if want := filepath.Join(home, "config.json"); h.ConfigDest != want {
+		t.Errorf("ConfigDest = %q, want %q", h.ConfigDest, want)
+	}
+	if want := filepath.Join(repo, "common", "AGENTS.md"); h.RulesSrc != want {
+		t.Errorf("RulesSrc = %q, want %q", h.RulesSrc, want)
+	}
+	if want := filepath.Join(home, "AGENTS.md"); h.RulesDest != want {
+		t.Errorf("RulesDest = %q, want %q", h.RulesDest, want)
+	}
+	if h.HooksSrc != "" {
+		t.Errorf("HooksSrc = %q, want empty", h.HooksSrc)
+	}
+	if h.HooksDest != "" {
+		t.Errorf("HooksDest = %q, want empty", h.HooksDest)
+	}
+	if !h.PreserveSkillGroups {
+		t.Error("PreserveSkillGroups = false, want true")
 	}
 }
 
