@@ -37,9 +37,12 @@ agent-synchronizer <repo_root>
 ├── cursor/
 │   ├── skills/
 │   └── .cursorrules
-└── opencode/
+├── opencode/
+│   ├── skills/
+│   └── opencode.jsonc
+└── hermes/
     ├── skills/
-    └── opencode.jsonc
+    └── config.json
 ```
 
 `common/` holds skills, subagents, and rules shared across harnesses. Each
@@ -60,3 +63,4 @@ We use the `$HOME`-based config directories for each harness.
 - Codex
 - OpenCode
 - Cursor
+- Hermes
