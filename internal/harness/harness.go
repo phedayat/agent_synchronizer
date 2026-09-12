@@ -9,8 +9,9 @@ import (
 
 // Seams for tests to substitute stubs without touching the filesystem.
 var (
-	syncTarget          = syncengine.SyncTarget
-	syncFlattenedSkills = syncengine.SyncFlattenedSkills
+	syncTarget                 = syncengine.SyncTarget
+	syncFlattenedSkills        = syncengine.SyncFlattenedSkills
+	syncPartiallyGroupedSkills = syncengine.SyncPartiallyGroupedSkills
 )
 
 // Harness mirrors sync_engine.py's Harness ABC as a single config-driven
@@ -26,6 +27,8 @@ type Harness struct {
 	ConfigSrc, ConfigDest string
 	RulesSrc, RulesDest   string
 	HooksSrc, HooksDest   string
+
+	PreserveSkillGroups bool
 }
 
 func (h *Harness) RepoDir() string {
@@ -41,6 +44,13 @@ func (h *Harness) SkillsDir() string {
 }
 
 func (h *Harness) SyncSkills() error {
+	if h.PreserveSkillGroups {
+		return syncPartiallyGroupedSkills(
+			filepath.Join(h.Home, "skills"),
+			filepath.Join(h.CommonDir(), "skills"),
+			h.SkillsDir(),
+		)
+	}
 	return syncFlattenedSkills(
 		filepath.Join(h.Home, "skills"),
 		filepath.Join(h.CommonDir(), "skills"),
