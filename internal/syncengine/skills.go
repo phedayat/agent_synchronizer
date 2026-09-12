@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+// filepathRel is a seam over filepath.Rel so tests can inject the otherwise
+// unreachable error case (mirrors engine.go's getwd seam).
+var filepathRel = filepath.Rel
+
 // iterSkillDirs returns every directory under root that directly contains
 // SKILL.md, at any depth, without descending into a directory once matched.
 // Mirrors sync_engine.py's _iter_skill_dirs.
@@ -107,7 +111,7 @@ func SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc string) error {
 	grouped := map[string]string{}
 	nameToRel := map[string]string{}
 	for _, skillDir := range iterSkillDirs(groupedSrc) {
-		rel, err := filepath.Rel(groupedSrc, skillDir)
+		rel, err := filepathRel(groupedSrc, skillDir)
 		if err != nil {
 			return err
 		}

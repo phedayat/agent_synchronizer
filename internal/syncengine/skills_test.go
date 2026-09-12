@@ -1,6 +1,7 @@
 package syncengine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,6 +311,324 @@ func TestSyncFlattenedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
 	}
 	if resolve(orphan) != resolve(orphanTarget) {
 		t.Fatalf("expected orphan symlink target unchanged")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsFlattensCommonKeepsGroupedNested(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := filepath.Join(t.TempDir(), "skills")
+
+	skillA := filepath.Join(flattenSrc, "skill-a")
+	mkSkill(t, skillA)
+	skill11 := filepath.Join(groupedSrc, "group_1", "skill_11")
+	mkSkill(t, skill11)
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	flatLink := filepath.Join(dest, "skill-a")
+	if !isSymlink(flatLink) || resolve(flatLink) != resolve(skillA) {
+		t.Fatalf("expected %s to symlink to %s", flatLink, skillA)
+	}
+	nestedLink := filepath.Join(dest, "group_1", "skill_11")
+	if !isSymlink(nestedLink) || resolve(nestedLink) != resolve(skill11) {
+		t.Fatalf("expected %s to symlink to %s", nestedLink, skill11)
+	}
+	groupDir := filepath.Join(dest, "group_1")
+	if isSymlink(groupDir) {
+		t.Fatalf("expected %s to be a real directory, not a symlink", groupDir)
+	}
+	if !isDir(groupDir) {
+		t.Fatalf("expected %s to be a directory", groupDir)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsGroupedOverridesFlatSameName(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+
+	flatSkillX := filepath.Join(flattenSrc, "skill-x")
+	mkSkill(t, flatSkillX)
+	groupedSkillX := filepath.Join(groupedSrc, "group_1", "skill-x")
+	mkSkill(t, groupedSkillX)
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	flatLink := filepath.Join(dest, "skill-x")
+	if exists(flatLink) {
+		t.Fatalf("expected no flat entry at %s", flatLink)
+	}
+	nestedLink := filepath.Join(dest, "group_1", "skill-x")
+	if !isSymlink(nestedLink) || resolve(nestedLink) != resolve(groupedSkillX) {
+		t.Fatalf("expected %s to symlink to grouped version %s", nestedLink, groupedSkillX)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsTopLevelGroupedSkillLandsFlat(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+
+	skill21 := filepath.Join(groupedSrc, "skill-21")
+	mkSkill(t, skill21)
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(dest, "skill-21")
+	if !isSymlink(link) || resolve(link) != resolve(skill21) {
+		t.Fatalf("expected %s to symlink to %s", link, skill21)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsAbsorbsUnmanagedRealDir(t *testing.T) {
+	withApprovedStdin(t)
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(flattenSrc, "skill-a"))
+
+	unmanaged := filepath.Join(dest, "unmanaged-skill")
+	if err := os.MkdirAll(unmanaged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unmanaged, "SKILL.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	movedTarget := filepath.Join(groupedSrc, "unmanaged-skill")
+	if !isDir(movedTarget) {
+		t.Fatalf("expected unmanaged dir moved to %s", movedTarget)
+	}
+	link := filepath.Join(dest, "unmanaged-skill")
+	if !isSymlink(link) || resolve(link) != resolve(movedTarget) {
+		t.Fatalf("expected %s to symlink to %s", link, movedTarget)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsLeavesCorrectSymlinksAlone(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	skillA := filepath.Join(flattenSrc, "skill-a")
+	mkSkill(t, skillA)
+	skill11 := filepath.Join(groupedSrc, "group_1", "skill_11")
+	mkSkill(t, skill11)
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	flatLink := filepath.Join(dest, "skill-a")
+	if !isSymlink(flatLink) || resolve(flatLink) != resolve(skillA) {
+		t.Fatalf("expected %s to remain symlinked to %s", flatLink, skillA)
+	}
+	nestedLink := filepath.Join(dest, "group_1", "skill_11")
+	if !isSymlink(nestedLink) || resolve(nestedLink) != resolve(skill11) {
+		t.Fatalf("expected %s to remain symlinked to %s", nestedLink, skill11)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsPreservesNestedGroupPath(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	skillDeep := filepath.Join(groupedSrc, "level1", "level2", "skill-deep")
+	mkSkill(t, skillDeep)
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(dest, "level1", "level2", "skill-deep")
+	if !isSymlink(link) || resolve(link) != resolve(skillDeep) {
+		t.Fatalf("expected %s to symlink to %s", link, skillDeep)
+	}
+	level1 := filepath.Join(dest, "level1")
+	if isSymlink(level1) || !isDir(level1) {
+		t.Fatalf("expected %s to be a real directory", level1)
+	}
+	level2 := filepath.Join(level1, "level2")
+	if isSymlink(level2) || !isDir(level2) {
+		t.Fatalf("expected %s to be a real directory", level2)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenMkdirDestFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	mkSkill(t, filepath.Join(flattenSrc, "skill-a"))
+
+	parent := t.TempDir()
+	blockingFile := filepath.Join(parent, "blocked")
+	if err := os.WriteFile(blockingFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(blockingFile, "skills")
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when dest cannot be created")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenReadDirDestFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	mkSkill(t, filepath.Join(flattenSrc, "skill-a"))
+
+	dest := t.TempDir()
+	if err := os.Chmod(dest, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when dest cannot be read")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenMoveFails(t *testing.T) {
+	withApprovedStdin(t)
+	flattenSrc := t.TempDir()
+	dest := t.TempDir()
+	unmanaged := filepath.Join(dest, "unmanaged-skill")
+	if err := os.MkdirAll(unmanaged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	groupedSrc := filepath.Join(t.TempDir(), "blocked-grouped-source")
+	if err := os.WriteFile(groupedSrc, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when move fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenFlatSymlinkFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	mkSkill(t, filepath.Join(flattenSrc, "skill-a"))
+
+	dest := t.TempDir()
+	if err := os.Chmod(dest, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when flat symlink creation fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenGroupedSymlinkFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group_1", "skill_11"))
+
+	dest := t.TempDir()
+	groupDir := filepath.Join(dest, "group_1")
+	if err := os.MkdirAll(groupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(groupDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(groupDir, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when grouped symlink creation fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(flattenSrc, "skill-a"))
+
+	orphanTarget := t.TempDir()
+	orphan := filepath.Join(dest, "orphan")
+	if err := os.Symlink(orphanTarget, orphan); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	if !isSymlink(orphan) {
+		t.Fatalf("expected orphan symlink to remain untouched")
+	}
+	if resolve(orphan) != resolve(orphanTarget) {
+		t.Fatalf("expected orphan symlink target unchanged")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenNestedMkdirFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "level1", "level2", "skill-deep"))
+
+	dest := t.TempDir()
+	level1 := filepath.Join(dest, "level1")
+	if err := os.WriteFile(level1, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when nested group directory cannot be created")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenRemovingStaleSymlinkFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	mkSkill(t, filepath.Join(flattenSrc, "skill-a"))
+
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "skills-link")
+	if err := os.Symlink(t.TempDir(), dest); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when removing stale symlink fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenFilepathRelFails(t *testing.T) {
+	old := filepathRel
+	filepathRel = func(base, target string) (string, error) {
+		return "", errors.New("injected filepath.Rel failure")
+	}
+	t.Cleanup(func() { filepathRel = old })
+
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group_1", "skill_11"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when filepath.Rel fails")
 	}
 }
 
