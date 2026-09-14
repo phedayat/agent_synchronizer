@@ -62,7 +62,12 @@
   (`~/.hermes/skills/<group>/<skill>`), while `common/skills` still
   flattens to `~/.hermes/skills/<skill>` regardless of grouping in the
   repo. Every other harness leaves `PreserveSkillGroups` at `false` and is
-  unaffected.
+  unaffected. A new skill later added directly at `~/.hermes/skills/<name>`
+  or inside an existing group (`~/.hermes/skills/<group>/<name>`) is
+  absorbed back into the repo by `syncengine.SyncPartiallyGroupedSkills`:
+  one inside a known group goes to `<repo_root>/hermes/skills/<group>/<name>`,
+  one outside every known group goes to `<repo_root>/common/skills/<name>`
+  instead, since it has no group of its own.
 
 ## Testing
 
