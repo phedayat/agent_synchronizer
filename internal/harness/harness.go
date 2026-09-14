@@ -9,8 +9,9 @@ import (
 
 // Seams for tests to substitute stubs without touching the filesystem.
 var (
-	syncTarget          = syncengine.SyncTarget
-	syncFlattenedSkills = syncengine.SyncFlattenedSkills
+	syncTarget                 = syncengine.SyncTarget
+	syncFlattenedSkills        = syncengine.SyncFlattenedSkills
+	syncPartiallyGroupedSkills = syncengine.SyncPartiallyGroupedSkills
 )
 
 // Harness mirrors sync_engine.py's Harness ABC as a single config-driven
@@ -26,6 +27,8 @@ type Harness struct {
 	ConfigSrc, ConfigDest string
 	RulesSrc, RulesDest   string
 	HooksSrc, HooksDest   string
+
+	PreserveSkillGroups bool
 }
 
 func (h *Harness) RepoDir() string {
@@ -41,6 +44,13 @@ func (h *Harness) SkillsDir() string {
 }
 
 func (h *Harness) SyncSkills() error {
+	if h.PreserveSkillGroups {
+		return syncPartiallyGroupedSkills(
+			filepath.Join(h.Home, "skills"),
+			filepath.Join(h.CommonDir(), "skills"),
+			h.SkillsDir(),
+		)
+	}
 	return syncFlattenedSkills(
 		filepath.Join(h.Home, "skills"),
 		filepath.Join(h.CommonDir(), "skills"),
@@ -157,13 +167,29 @@ func NewOpenCode(repo string) *Harness {
 	}
 }
 
+func NewHermes(repo string) *Harness {
+	home := filepath.Join(userHomeDir(), ".hermes")
+	repoDir := filepath.Join(repo, "hermes")
+	return &Harness{
+		Name:                "hermes",
+		Home:                home,
+		RepoRoot:            repo,
+		ConfigSrc:           filepath.Join(repoDir, "config.json"),
+		ConfigDest:          filepath.Join(home, "config.json"),
+		RulesSrc:            filepath.Join(repo, "common", "AGENTS.md"),
+		RulesDest:           filepath.Join(home, "AGENTS.md"),
+		PreserveSkillGroups: true,
+	}
+}
+
 // AllHarnesses returns the fixed harness list, matching Python's
-// ALL_HARNESSES order: Claude, Codex, Cursor, OpenCode.
+// ALL_HARNESSES order: Claude, Codex, Cursor, OpenCode, Hermes.
 func AllHarnesses(repo string) []*Harness {
 	return []*Harness{
 		NewClaude(repo),
 		NewCodex(repo),
 		NewCursor(repo),
 		NewOpenCode(repo),
+		NewHermes(repo),
 	}
 }

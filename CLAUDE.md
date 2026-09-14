@@ -27,14 +27,15 @@
 
 ## Harnesses
 
-- Every harness (`claude`, `codex`, `cursor`, `opencode`) is a value of the
-  single config-driven `Harness` struct in `internal/harness/harness.go`,
-  not a separate class per harness. Per-harness constructors
-  (`NewClaude`, `NewCodex`, `NewCursor`, `NewOpenCode`) populate its fields
-  (`ConfigSrc`/`ConfigDest`, `RulesSrc`/`RulesDest`, `HooksSrc`/`HooksDest`);
-  an empty source field means that step is a no-op for that harness.
-  `Harness.Sync()` calls `SyncSkills`, `SyncSubagents`, `SyncConfig`,
-  `SyncRules`, `SyncHooks` in sequence; there is no per-method CLI flag.
+- Every harness (`claude`, `codex`, `cursor`, `opencode`, `hermes`) is a
+  value of the single config-driven `Harness` struct in
+  `internal/harness/harness.go`, not a separate class per harness.
+  Per-harness constructors (`NewClaude`, `NewCodex`, `NewCursor`,
+  `NewOpenCode`, `NewHermes`) populate its fields (`ConfigSrc`/`ConfigDest`,
+  `RulesSrc`/`RulesDest`, `HooksSrc`/`HooksDest`); an empty source field
+  means that step is a no-op for that harness. `Harness.Sync()` calls
+  `SyncSkills`, `SyncSubagents`, `SyncConfig`, `SyncRules`, `SyncHooks` in
+  sequence; there is no per-method CLI flag.
 - Only Claude syncs hooks today (`<repo_root>/claude/hooks` → `~/.claude/hooks`);
   `SyncHooks()` is a no-op for Codex, Cursor, and OpenCode (empty `HooksSrc`).
 - Subagents sync from `<repo_root>/common/agents` for every harness. Config
@@ -55,6 +56,18 @@
   multiple source directories.
 - Cursor's `ConfigSrc`/`ConfigDest` are left empty, so `SyncConfig()` is a
   no-op — Cursor has no config file to sync today.
+- `Harness` has a `PreserveSkillGroups bool` field (default `false`).
+  Hermes is the one harness that sets it to `true`: for Hermes,
+  `<repo_root>/hermes/skills` keeps its group structure at the destination
+  (`~/.hermes/skills/<group>/<skill>`), while `common/skills` still
+  flattens to `~/.hermes/skills/<skill>` regardless of grouping in the
+  repo. Every other harness leaves `PreserveSkillGroups` at `false` and is
+  unaffected. A new skill later added directly at `~/.hermes/skills/<name>`
+  or inside an existing group (`~/.hermes/skills/<group>/<name>`) is
+  absorbed back into the repo by `syncengine.SyncPartiallyGroupedSkills`:
+  one inside a known group goes to `<repo_root>/hermes/skills/<group>/<name>`,
+  one outside every known group goes to `<repo_root>/common/skills/<name>`
+  instead, since it has no group of its own.
 
 ## Testing
 

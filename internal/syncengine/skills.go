@@ -4,7 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
+
+// filepathRel is a seam over filepath.Rel so tests can inject the otherwise
+// unreachable error case (mirrors engine.go's getwd seam).
+var filepathRel = filepath.Rel
 
 // iterSkillDirs returns every directory under root that directly contains
 // SKILL.md, at any depth, without descending into a directory once matched.
@@ -93,6 +98,134 @@ func SyncFlattenedSkills(dest string, sources ...string) error {
 		if err := symlink(desired[name], filepath.Join(dest, name)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// SyncPartiallyGroupedSkills syncs flat skills from flattenSrc directly under
+// dest, while skills under groupedSrc keep their relative group subfolder at
+// dest. A grouped skill's name overrides a flat skill of the same name. A
+// new unmanaged skill found inside an existing group folder at dest is
+// absorbed back into that same group in groupedSrc; one found outside every
+// known group is absorbed into flattenSrc instead, since it has no group.
+func SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc string) error {
+	flat := collectSkills(flattenSrc)
+
+	grouped := map[string]string{} // rel (slash-separated) -> absDir
+	nameToRel := map[string]string{}
+	groupDirs := map[string]struct{}{} // known intermediate group-folder rel paths
+	for _, skillDir := range iterSkillDirs(groupedSrc) {
+		rel, err := filepathRel(groupedSrc, skillDir)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		grouped[rel] = skillDir
+		nameToRel[filepath.Base(skillDir)] = rel
+
+		segments := strings.Split(rel, "/")
+		for i := 1; i < len(segments); i++ {
+			groupDirs[strings.Join(segments[:i], "/")] = struct{}{}
+		}
+	}
+
+	for name := range nameToRel {
+		delete(flat, name)
+	}
+
+	if isSymlink(dest) {
+		if err := os.Remove(dest); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+
+	if err := absorbGroupedSkills(dest, "", flattenSrc, groupedSrc, flat, grouped, groupDirs); err != nil {
+		return err
+	}
+
+	flatNames := make([]string, 0, len(flat))
+	for name := range flat {
+		flatNames = append(flatNames, name)
+	}
+	sort.Strings(flatNames)
+	for _, name := range flatNames {
+		if err := symlink(flat[name], filepath.Join(dest, name)); err != nil {
+			return err
+		}
+	}
+
+	groupedRels := make([]string, 0, len(grouped))
+	for rel := range grouped {
+		groupedRels = append(groupedRels, rel)
+	}
+	sort.Strings(groupedRels)
+	for _, rel := range groupedRels {
+		destPath := filepath.Join(dest, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			return err
+		}
+		if err := symlink(grouped[rel], destPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// absorbGroupedSkills moves unmanaged real entries under dirPath (dest, or
+// one of its known group subdirectories, identified by relPrefix) into the
+// repo: entries at the top level (relPrefix == "") go to flattenSrc, entries
+// inside a known group go to groupedSrc at the same relative path. It
+// recurses only through directories already known to be part of the group
+// structure (groupDirs), so an entirely new group is absorbed as one unit
+// into flattenSrc rather than merged into an existing group.
+func absorbGroupedSkills(dirPath, relPrefix, flattenSrc, groupedSrc string, flat, grouped map[string]string, groupDirs map[string]struct{}) error {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		childPath := filepath.Join(dirPath, name)
+		if isSymlink(childPath) {
+			continue
+		}
+
+		childRel := name
+		if relPrefix != "" {
+			childRel = relPrefix + "/" + name
+		}
+
+		if relPrefix == "" {
+			if _, ok := flat[name]; ok {
+				continue
+			}
+		}
+		if _, ok := grouped[childRel]; ok {
+			continue
+		}
+		if _, ok := groupDirs[childRel]; ok {
+			if err := absorbGroupedSkills(childPath, childRel, flattenSrc, groupedSrc, flat, grouped, groupDirs); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if relPrefix == "" {
+			target := filepath.Join(flattenSrc, name)
+			if err := move(childPath, target); err != nil {
+				return err
+			}
+			flat[name] = target
+			continue
+		}
+		target := filepath.Join(groupedSrc, filepath.FromSlash(childRel))
+		if err := move(childPath, target); err != nil {
+			return err
+		}
+		grouped[childRel] = target
 	}
 	return nil
 }
