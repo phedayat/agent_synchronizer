@@ -1,6 +1,7 @@
 package syncengine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,6 +80,10 @@ func SyncFlattenedSkills(dest string, sources ...string) error {
 		}
 		childPath := filepath.Join(dest, name)
 		if isSymlink(childPath) {
+			logger.Info(fmt.Sprintf("Removing stale skill symlink %s", childPath))
+			if err := os.Remove(childPath); err != nil {
+				return err
+			}
 			continue
 		}
 		target := filepath.Join(lastSource, name)
