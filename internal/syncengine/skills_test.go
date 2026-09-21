@@ -291,7 +291,7 @@ func TestSyncFlattenedSkillsErrorsWhenSymlinkFails(t *testing.T) {
 	}
 }
 
-func TestSyncFlattenedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
+func TestSyncFlattenedSkillsRemovesUnmanagedSymlinkNotInDesired(t *testing.T) {
 	src := t.TempDir()
 	mkSkill(t, filepath.Join(src, "skill-a"))
 
@@ -306,11 +306,11 @@ func TestSyncFlattenedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !isSymlink(orphan) {
-		t.Fatalf("expected orphan symlink to remain untouched")
+	if isSymlink(orphan) {
+		t.Fatalf("expected orphan symlink to be removed")
 	}
-	if resolve(orphan) != resolve(orphanTarget) {
-		t.Fatalf("expected orphan symlink target unchanged")
+	if _, err := os.Lstat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("expected orphan symlink path to no longer exist, got err=%v", err)
 	}
 }
 
@@ -661,7 +661,7 @@ func TestSyncPartiallyGroupedSkillsErrorsWhenGroupedSymlinkFails(t *testing.T) {
 	}
 }
 
-func TestSyncPartiallyGroupedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
+func TestSyncPartiallyGroupedSkillsRemovesUnmanagedSymlinkNotInDesired(t *testing.T) {
 	flattenSrc := t.TempDir()
 	groupedSrc := t.TempDir()
 	dest := t.TempDir()
@@ -677,11 +677,11 @@ func TestSyncPartiallyGroupedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.
 		t.Fatal(err)
 	}
 
-	if !isSymlink(orphan) {
-		t.Fatalf("expected orphan symlink to remain untouched")
+	if isSymlink(orphan) {
+		t.Fatalf("expected orphan symlink to be removed")
 	}
-	if resolve(orphan) != resolve(orphanTarget) {
-		t.Fatalf("expected orphan symlink target unchanged")
+	if _, err := os.Lstat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("expected orphan symlink path to no longer exist, got err=%v", err)
 	}
 }
 
@@ -766,5 +766,385 @@ func TestSyncFlattenedSkillsRebuildsStaleWholeDirSymlink(t *testing.T) {
 	link := filepath.Join(dest, "skill-a")
 	if !isSymlink(link) || resolve(link) != resolve(skillA) {
 		t.Fatalf("expected %s to symlink to %s", link, skillA)
+	}
+}
+
+func TestSyncFlattenedSkillsRemovesSymlinkOfSkillRemovedFromRepo(t *testing.T) {
+	src := t.TempDir()
+	mkSkill(t, filepath.Join(src, "skill-a"))
+	dest := t.TempDir()
+	if err := SyncFlattenedSkills(dest, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(src, "skill-a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := SyncFlattenedSkills(dest, src); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dest, "skill-a")); !os.IsNotExist(err) {
+		t.Fatalf("expected removed skill's symlink to be gone")
+	}
+}
+
+func TestSyncFlattenedSkillsErrorsWhenRemovingUnmanagedSymlinkFails(t *testing.T) {
+	src := t.TempDir()
+	mkSkill(t, filepath.Join(src, "skill-a"))
+
+	dest := t.TempDir()
+	orphan := filepath.Join(dest, "orphan")
+	if err := os.Symlink(t.TempDir(), orphan); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dest, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncFlattenedSkills(dest, src); err == nil {
+		t.Fatal("expected error when removing unmanaged symlink fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsAbsorbsRealContentFromStaleGroupDirectory(t *testing.T) {
+	withApprovedStdin(t)
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+
+	// Create one skill under a known group to establish normal dest structure
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	// First sync to set up normal dest structure
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually create a stale group directory with unmanaged content
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a stale symlink in the stale group
+	staleSymlink := filepath.Join(staleGroupDir, "stale-skill")
+	if err := os.Symlink(t.TempDir(), staleSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a real unmanaged skill in the stale group
+	realSkill := filepath.Join(staleGroupDir, "real-skill")
+	mkSkill(t, realSkill)
+
+	// Second sync to absorb the stale group's content
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert: stale symlink is deleted
+	if _, err := os.Lstat(staleSymlink); !os.IsNotExist(err) {
+		t.Fatalf("expected stale symlink to be removed, but it still exists or has error: %v", err)
+	}
+
+	// Assert: real-skill moved to flattenSrc (stale groups are absorbed into flattenSrc)
+	movedSkill := filepath.Join(flattenSrc, "stale-group", "real-skill")
+	if !isDir(movedSkill) {
+		t.Fatalf("expected real-skill to be moved to %s", movedSkill)
+	}
+	if !exists(filepath.Join(movedSkill, "SKILL.md")) {
+		t.Fatalf("expected SKILL.md to exist in moved real-skill at %s", movedSkill)
+	}
+
+	// Assert: stale-group directory is removed from dest (now empty)
+	if exists(staleGroupDir) {
+		t.Fatalf("expected stale-group directory to be removed from dest since it became empty")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsPreservesStaleGroupDirectoryWithUnapprovedRealContent(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+
+	// Create one skill under a known group to establish normal dest structure
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	// First sync to set up normal dest structure (no special stdin needed, no unmanaged content yet)
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually create a stale group directory with unmanaged content
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a stale symlink in the stale group
+	staleSymlink := filepath.Join(staleGroupDir, "stale-skill")
+	if err := os.Symlink(t.TempDir(), staleSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a real unmanaged skill in the stale group
+	realSkill := filepath.Join(staleGroupDir, "real-skill")
+	mkSkill(t, realSkill)
+
+	// Second sync with declined move prompt
+	withStdin(t, "n\n")
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert: stale symlink is still removed (unconditional deletion)
+	if _, err := os.Lstat(staleSymlink); !os.IsNotExist(err) {
+		t.Fatalf("expected stale symlink to be removed even with declined prompt, but it still exists or has error: %v", err)
+	}
+
+	// Assert: real content is NOT moved - still in dest (move was declined)
+	if !exists(realSkill) {
+		t.Fatalf("expected real-skill to remain in dest since move was declined")
+	}
+	if !exists(filepath.Join(realSkill, "SKILL.md")) {
+		t.Fatalf("expected SKILL.md to still exist in real-skill at dest")
+	}
+
+	// Assert: stale-group directory is NOT removed (still has content)
+	if !exists(staleGroupDir) {
+		t.Fatalf("expected stale-group directory to remain in dest since it still has content")
+	}
+
+	// Bonus: verify copy WAS made to repo (move() copies to dest even on decline)
+	copiedSkill := filepath.Join(flattenSrc, "stale-group", "real-skill")
+	if !isDir(copiedSkill) {
+		t.Fatalf("expected real-skill to be copied to %s since move() copies before checking approval", copiedSkill)
+	}
+	if !exists(filepath.Join(copiedSkill, "SKILL.md")) {
+		t.Fatalf("expected SKILL.md to exist in copied real-skill at %s", copiedSkill)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenStaleGroupSymlinkRemovalFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(staleGroupDir, "stale-skill")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(staleGroupDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(staleGroupDir, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when removing stale group symlink fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenStaleGroupDirRemovalFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(staleGroupDir, "stale-skill")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dest, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when removing stale group directory fails")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenCheckingStaleGroupForSymlinksFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(staleGroupDir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(staleGroupDir, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when containsSymlink cannot read the candidate stale directory")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenNestedStaleGroupReadDirFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// "aaa-link" sorts before "zzz-blocked", so containsSymlink short-circuits
+	// true via the symlink without ever touching the blocked subdirectory.
+	if err := os.Symlink(t.TempDir(), filepath.Join(staleGroupDir, "aaa-link")); err != nil {
+		t.Fatal(err)
+	}
+	blocked := filepath.Join(staleGroupDir, "zzz-blocked")
+	if err := os.MkdirAll(blocked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(blocked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when absorbStaleGroupSubtree recurses into an unreadable nested directory")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenNestedContainsSymlinkReadDirFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleDir := filepath.Join(dest, "stale-err")
+	blockedNested := filepath.Join(staleDir, "blocked-nested")
+	if err := os.MkdirAll(blockedNested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(blockedNested, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blockedNested, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when containsSymlink's nested recursive call fails to read a subdirectory")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsAbsorbsStaleGroupWithNestedSymlinkOnly(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleDir := filepath.Join(dest, "stale-found")
+	inner := filepath.Join(staleDir, "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(inner, "deep-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	if exists(staleDir) {
+		t.Fatalf("expected %s to be fully removed once its only content (a nested symlink) was cleaned up", staleDir)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenStaleGroupContentMoveFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-create a FILE (not a directory) at the exact path move() will need
+	// to MkdirAll into, so move()'s os.MkdirAll(filepath.Dir(dest), 0o755)
+	// fails because a non-directory already occupies that path.
+	blockingPath := filepath.Join(flattenSrc, "stale-group")
+	if err := os.WriteFile(blockingPath, []byte("blocking"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(staleGroupDir, "stale-skill")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staleGroupDir, "note.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when move() fails to absorb real content from a stale group directory")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenFlatStaleSymlinkRemovalFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a stale flat-level symlink (no nesting, directly under dest)
+	staleSymlink := filepath.Join(dest, "stale-flat")
+	if err := os.Symlink(t.TempDir(), staleSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make dest read-only so the flat stale symlink cannot be removed
+	if err := os.Chmod(dest, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when flat stale symlink removal fails in absorbGroupedSkills")
 	}
 }

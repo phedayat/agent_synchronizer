@@ -4,6 +4,11 @@
 
 - This project synchronizes shared agent files/directories across provider folders.
 - Keep implementation minimal, explicit, and safe for filesystem operations.
+- The repo is the source of truth for both its own files and the agent
+  config (destination) directories; this tool's job is to keep the repo's
+  files and the destination symlinks in sync bidirectionally, including
+  removing destination symlinks (and directories) whose repo source has
+  been removed.
 
 ## Core Principles
 
@@ -34,8 +39,8 @@
   `NewOpenCode`, `NewHermes`) populate its fields (`ConfigSrc`/`ConfigDest`,
   `RulesSrc`/`RulesDest`, `HooksSrc`/`HooksDest`); an empty source field
   means that step is a no-op for that harness. `Harness.Sync()` calls
-  `SyncSkills`, `SyncSubagents`, `SyncConfig`, `SyncRules`, `SyncHooks` in
-  sequence; there is no per-method CLI flag.
+  `SyncSkills`, `SyncSubagents`, `SyncConfig`, `SyncRules`, `SyncHooks`,
+  `SyncExtras` in sequence; there is no per-method CLI flag.
 - Only Claude syncs hooks today (`<repo_root>/claude/hooks` → `~/.claude/hooks`);
   `SyncHooks()` is a no-op for Codex, Cursor, and OpenCode (empty `HooksSrc`).
 - Subagents sync from `<repo_root>/common/agents` for every harness. Config
@@ -68,6 +73,16 @@
   one inside a known group goes to `<repo_root>/hermes/skills/<group>/<name>`,
   one outside every known group goes to `<repo_root>/common/skills/<name>`
   instead, since it has no group of its own.
+- `Harness.SyncExtras()` is a catch-all: every top-level file/dir in
+  `<repo_root>/<harness>/` and `<repo_root>/common/` that isn't `skills`,
+  `agents`, or the harness's actual `ConfigSrc`/`RulesSrc`/`HooksSrc`
+  basename is symlinked into `<home>/` under its own name via
+  `syncengine.SyncTarget`, the same primitive used for config/rules/hooks —
+  a file or directory becomes one symlink, with pre-existing real content
+  at the destination absorbed first. The harness-specific dir is synced
+  before `common/`, so a harness-specific entry claims its destination name
+  before `common/` is considered for it (matching skills'
+  harness-overrides-common precedent).
 
 ## Testing
 
@@ -111,6 +126,14 @@
   `repo_root`/`$HOME` before running against a real one.
 - Do not overwrite existing real files/directories unless explicitly intended.
 - Preserve existing user data and local provider configuration.
+- Deleting a destination symlink or directory because its repo source is
+  gone is intentional cleanup, not data loss — the repo source of truth
+  never changes as a result; before removing a directory, confirm it holds
+  no absorbable real (non-symlink) content, and absorb that content back
+  into the repo first.
+- Removal recursion always walks strictly downward through real (non-
+  symlink) directories on the destination side, so it terminates and never
+  follows a symlink into a cycle.
 
 ## Change Discipline
 

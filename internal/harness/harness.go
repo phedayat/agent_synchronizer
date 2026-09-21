@@ -3,6 +3,7 @@ package harness
 import (
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/phedayat/agent_synchronizer/internal/syncengine"
 )
@@ -83,6 +84,61 @@ func (h *Harness) SyncHooks() error {
 	return syncTarget(h.HooksSrc, h.HooksDest)
 }
 
+// extrasKnownNames returns the top-level basenames already handled by an
+// explicit Sync* method, so SyncExtras skips them.
+func (h *Harness) extrasKnownNames() map[string]struct{} {
+	known := map[string]struct{}{"skills": {}, "agents": {}}
+	for _, src := range []string{h.ConfigSrc, h.RulesSrc, h.HooksSrc} {
+		if src != "" {
+			known[filepath.Base(src)] = struct{}{}
+		}
+	}
+	return known
+}
+
+// syncExtrasDir symlinks every top-level entry of dir into h.Home except
+// those in known, via the same SyncTarget primitive used for config/rules/
+// hooks: a file or directory becomes one symlink, real pre-existing content
+// at dest is absorbed first.
+func (h *Harness) syncExtrasDir(dir string, known map[string]struct{}) error {
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if _, ok := known[name]; ok {
+			continue
+		}
+		if err := syncTarget(filepath.Join(dir, name), filepath.Join(h.Home, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SyncExtras symlinks every file/dir in the harness's own repo dir and in
+// common/ that isn't already covered by SyncSkills/SyncSubagents/
+// SyncConfig/SyncRules/SyncHooks. The repo dir is synced first so a
+// harness-specific entry claims its dest name before common/ is considered
+// for it: SyncTarget treats an already-symlinked dest as done, so whichever
+// source runs first wins on a name collision, matching skills'
+// harness-overrides-common precedent.
+func (h *Harness) SyncExtras() error {
+	known := h.extrasKnownNames()
+	if err := h.syncExtrasDir(h.RepoDir(), known); err != nil {
+		return err
+	}
+	return h.syncExtrasDir(h.CommonDir(), known)
+}
+
 func (h *Harness) Sync() error {
 	if err := h.SyncSkills(); err != nil {
 		return err
@@ -96,7 +152,10 @@ func (h *Harness) Sync() error {
 	if err := h.SyncRules(); err != nil {
 		return err
 	}
-	return h.SyncHooks()
+	if err := h.SyncHooks(); err != nil {
+		return err
+	}
+	return h.SyncExtras()
 }
 
 // userHomeDir wraps os.UserHomeDir; a failure here mirrors Python's
