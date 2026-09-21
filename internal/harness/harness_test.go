@@ -38,6 +38,27 @@ func stubSync(t *testing.T) (*[]targetCall, *[]skillsCall) {
 	return &targetCalls, &skillsCalls
 }
 
+type skillsSkipCall struct {
+	dest    string
+	skip    []string
+	sources []string
+}
+
+func stubSyncFlattenedSkillsSkipping(t *testing.T) *[]skillsSkipCall {
+	t.Helper()
+	var calls []skillsSkipCall
+
+	orig := syncFlattenedSkillsSkipping
+	syncFlattenedSkillsSkipping = func(dest string, skip []string, sources ...string) error {
+		calls = append(calls, skillsSkipCall{dest, skip, sources})
+		return nil
+	}
+	t.Cleanup(func() {
+		syncFlattenedSkillsSkipping = orig
+	})
+	return &calls
+}
+
 func stubPartiallyGroupedSkills(t *testing.T) *[]skillsCall {
 	t.Helper()
 	var calls []skillsCall
@@ -68,7 +89,8 @@ func TestClaudeSyncTargets(t *testing.T) {
 	h := NewClaude(repo)
 	home := h.Home
 
-	targetCalls, skillsCalls := stubSync(t)
+	targetCalls, _ := stubSync(t)
+	skipCalls := stubSyncFlattenedSkillsSkipping(t)
 
 	if err := h.SyncSkills(); err != nil {
 		t.Fatal(err)
@@ -86,12 +108,13 @@ func TestClaudeSyncTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wantSkills := skillsCall{
+	wantSkills := skillsSkipCall{
 		dest:    filepath.Join(home, "skills"),
+		skip:    []string{"synced"},
 		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "claude", "skills")},
 	}
-	if len(*skillsCalls) != 1 || !reflect.DeepEqual((*skillsCalls)[0], wantSkills) {
-		t.Fatalf("skills call = %+v, want %+v", *skillsCalls, wantSkills)
+	if len(*skipCalls) != 1 || !reflect.DeepEqual((*skipCalls)[0], wantSkills) {
+		t.Fatalf("skills call = %+v, want %+v", *skipCalls, wantSkills)
 	}
 
 	if !containsTarget(*targetCalls, filepath.Join(repo, "common", "agents"), filepath.Join(home, "agents")) {
@@ -287,8 +310,8 @@ func TestSyncCallsAllSixMethodsInOrder(t *testing.T) {
 
 	var order []string
 	origTarget := syncTarget
-	origSkills := syncFlattenedSkills
-	syncFlattenedSkills = func(dest string, sources ...string) error {
+	origSkillsSkipping := syncFlattenedSkillsSkipping
+	syncFlattenedSkillsSkipping = func(dest string, skip []string, sources ...string) error {
 		order = append(order, "skills")
 		return nil
 	}
@@ -311,7 +334,7 @@ func TestSyncCallsAllSixMethodsInOrder(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		syncTarget = origTarget
-		syncFlattenedSkills = origSkills
+		syncFlattenedSkillsSkipping = origSkillsSkipping
 	})
 
 	if err := h.Sync(); err != nil {
@@ -339,15 +362,19 @@ func TestSyncRulesIsNoopWhenEmpty(t *testing.T) {
 func TestSyncFailFastAtEachStep(t *testing.T) {
 	wantErr := os.ErrInvalid
 
-	newFailingSkills := func() { syncFlattenedSkills = func(dest string, sources ...string) error { return wantErr } }
-	newOKSkills := func() { syncFlattenedSkills = func(dest string, sources ...string) error { return nil } }
+	newFailingSkills := func() {
+		syncFlattenedSkillsSkipping = func(dest string, skip []string, sources ...string) error { return wantErr }
+	}
+	newOKSkills := func() {
+		syncFlattenedSkillsSkipping = func(dest string, skip []string, sources ...string) error { return nil }
+	}
 
 	t.Run("skills", func(t *testing.T) {
 		h := NewClaude("/repo")
-		origTarget, origSkills := syncTarget, syncFlattenedSkills
+		origTarget, origSkills := syncTarget, syncFlattenedSkillsSkipping
 		newFailingSkills()
 		syncTarget = func(src, dest string) error { t.Fatal("syncTarget should not be called"); return nil }
-		t.Cleanup(func() { syncTarget, syncFlattenedSkills = origTarget, origSkills })
+		t.Cleanup(func() { syncTarget, syncFlattenedSkillsSkipping = origTarget, origSkills })
 
 		if err := h.Sync(); err != wantErr {
 			t.Fatalf("err = %v, want %v", err, wantErr)
@@ -356,7 +383,7 @@ func TestSyncFailFastAtEachStep(t *testing.T) {
 
 	t.Run("config", func(t *testing.T) {
 		h := NewClaude("/repo")
-		origTarget, origSkills := syncTarget, syncFlattenedSkills
+		origTarget, origSkills := syncTarget, syncFlattenedSkillsSkipping
 		newOKSkills()
 		syncTarget = func(src, dest string) error {
 			if dest == h.ConfigDest {
@@ -364,7 +391,7 @@ func TestSyncFailFastAtEachStep(t *testing.T) {
 			}
 			return nil
 		}
-		t.Cleanup(func() { syncTarget, syncFlattenedSkills = origTarget, origSkills })
+		t.Cleanup(func() { syncTarget, syncFlattenedSkillsSkipping = origTarget, origSkills })
 
 		if err := h.Sync(); err != wantErr {
 			t.Fatalf("err = %v, want %v", err, wantErr)
@@ -373,7 +400,7 @@ func TestSyncFailFastAtEachStep(t *testing.T) {
 
 	t.Run("rules", func(t *testing.T) {
 		h := NewClaude("/repo")
-		origTarget, origSkills := syncTarget, syncFlattenedSkills
+		origTarget, origSkills := syncTarget, syncFlattenedSkillsSkipping
 		newOKSkills()
 		syncTarget = func(src, dest string) error {
 			if dest == h.RulesDest {
@@ -381,7 +408,7 @@ func TestSyncFailFastAtEachStep(t *testing.T) {
 			}
 			return nil
 		}
-		t.Cleanup(func() { syncTarget, syncFlattenedSkills = origTarget, origSkills })
+		t.Cleanup(func() { syncTarget, syncFlattenedSkillsSkipping = origTarget, origSkills })
 
 		if err := h.Sync(); err != wantErr {
 			t.Fatalf("err = %v, want %v", err, wantErr)
@@ -390,7 +417,7 @@ func TestSyncFailFastAtEachStep(t *testing.T) {
 
 	t.Run("hooks", func(t *testing.T) {
 		h := NewClaude("/repo")
-		origTarget, origSkills := syncTarget, syncFlattenedSkills
+		origTarget, origSkills := syncTarget, syncFlattenedSkillsSkipping
 		newOKSkills()
 		syncTarget = func(src, dest string) error {
 			if dest == h.HooksDest {
@@ -398,7 +425,7 @@ func TestSyncFailFastAtEachStep(t *testing.T) {
 			}
 			return nil
 		}
-		t.Cleanup(func() { syncTarget, syncFlattenedSkills = origTarget, origSkills })
+		t.Cleanup(func() { syncTarget, syncFlattenedSkillsSkipping = origTarget, origSkills })
 
 		if err := h.Sync(); err != wantErr {
 			t.Fatalf("err = %v, want %v", err, wantErr)
@@ -423,8 +450,8 @@ func TestSyncFailFastOnError(t *testing.T) {
 
 	wantErr := os.ErrInvalid
 	origTarget := syncTarget
-	origSkills := syncFlattenedSkills
-	syncFlattenedSkills = func(dest string, sources ...string) error { return nil }
+	origSkills := syncFlattenedSkillsSkipping
+	syncFlattenedSkillsSkipping = func(dest string, skip []string, sources ...string) error { return nil }
 	callCount := 0
 	syncTarget = func(src, dest string) error {
 		callCount++
@@ -432,7 +459,7 @@ func TestSyncFailFastOnError(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		syncTarget = origTarget
-		syncFlattenedSkills = origSkills
+		syncFlattenedSkillsSkipping = origSkills
 	})
 
 	if err := h.Sync(); err != wantErr {
@@ -497,7 +524,7 @@ func TestAllHarnesses(t *testing.T) {
 func TestSyncSkillsFlattenedWhenGroupsNotPreserved(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	repo := "/repo"
-	h := NewClaude(repo)
+	h := NewCodex(repo)
 	home := h.Home
 
 	_, flatCalls := stubSync(t)
@@ -509,7 +536,7 @@ func TestSyncSkillsFlattenedWhenGroupsNotPreserved(t *testing.T) {
 
 	wantSkills := skillsCall{
 		dest:    filepath.Join(home, "skills"),
-		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "claude", "skills")},
+		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "codex", "skills")},
 	}
 	if len(*flatCalls) != 1 || !reflect.DeepEqual((*flatCalls)[0], wantSkills) {
 		t.Fatalf("flattened skills call = %+v, want %+v", *flatCalls, wantSkills)
@@ -541,6 +568,66 @@ func TestSyncSkillsGroupedWhenPreserved(t *testing.T) {
 	}
 	if len(*flatCalls) != 0 {
 		t.Fatalf("expected no flattened skills calls, got %+v", *flatCalls)
+	}
+}
+
+func TestClaudeSyncSkillsUsesSkippingSeam(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := "/repo"
+	h := NewClaude(repo)
+	home := h.Home
+
+	_, flatCalls := stubSync(t)
+	skipCalls := stubSyncFlattenedSkillsSkipping(t)
+
+	if err := h.SyncSkills(); err != nil {
+		t.Fatal(err)
+	}
+
+	want := skillsSkipCall{
+		dest:    filepath.Join(home, "skills"),
+		skip:    []string{"synced"},
+		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "claude", "skills")},
+	}
+	if len(*skipCalls) != 1 || !reflect.DeepEqual((*skipCalls)[0], want) {
+		t.Fatalf("skipping skills call = %+v, want %+v", *skipCalls, want)
+	}
+	if len(*flatCalls) != 0 {
+		t.Fatalf("expected no plain flattened skills calls, got %+v", *flatCalls)
+	}
+}
+
+func TestCodexSyncSkillsUsesPlainSeam(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := "/repo"
+	h := NewCodex(repo)
+	home := h.Home
+
+	_, flatCalls := stubSync(t)
+	skipCalls := stubSyncFlattenedSkillsSkipping(t)
+
+	if err := h.SyncSkills(); err != nil {
+		t.Fatal(err)
+	}
+
+	want := skillsCall{
+		dest:    filepath.Join(home, "skills"),
+		sources: []string{filepath.Join(repo, "common", "skills"), filepath.Join(repo, "codex", "skills")},
+	}
+	if len(*flatCalls) != 1 || !reflect.DeepEqual((*flatCalls)[0], want) {
+		t.Fatalf("plain flattened skills call = %+v, want %+v", *flatCalls, want)
+	}
+	if len(*skipCalls) != 0 {
+		t.Fatalf("expected no skipping skills calls, got %+v", *skipCalls)
+	}
+}
+
+func TestNewClaudeSkillsSkipDestNames(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	h := NewClaude("/repo")
+	want := []string{"synced"}
+	if !reflect.DeepEqual(h.SkillsSkipDestNames, want) {
+		t.Fatalf("SkillsSkipDestNames = %+v, want %+v", h.SkillsSkipDestNames, want)
 	}
 }
 

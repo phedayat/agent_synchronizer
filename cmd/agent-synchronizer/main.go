@@ -46,6 +46,7 @@ func run(repoRootArg string) error {
 	for _, h := range allHarnesses(repo) {
 		logger.Info(fmt.Sprintf("Syncing %s", h.Name))
 		if err := h.Sync(); err != nil {
+			logger.Error(fmt.Sprintf("Failed to sync %s: %v", h.Name, err))
 			return err
 		}
 	}
@@ -53,9 +54,27 @@ func run(repoRootArg string) error {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `Usage: %[1]s <repo_root>
+
+agent-synchronizer keeps a repo's shared agent config (skills, subagents,
+config, rules, hooks) bidirectionally in sync with each supported
+harness's config directory under your home directory: claude, codex,
+cursor, opencode, hermes.
+
+Arguments:
+  repo_root   Path to the repo holding the harness config folders
+              (common/, claude/, codex/, cursor/, opencode/, hermes/).
+
+There are no flags; there is no dry-run mode.
+
+Example:
+  %[1]s ~/Desktop/agent-configs
+`, os.Args[0])
+	}
 	flag.Parse()
 	if flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: agent-synchronizer <repo_root>")
+		flag.Usage()
 		os.Exit(2)
 	}
 	if err := run(flag.Arg(0)); err != nil {

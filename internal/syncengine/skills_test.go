@@ -769,6 +769,64 @@ func TestSyncFlattenedSkillsRebuildsStaleWholeDirSymlink(t *testing.T) {
 	}
 }
 
+func TestSyncFlattenedSkillsSkippingRealDirSurvives(t *testing.T) {
+	src := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(src, "skill-a"))
+
+	skipped := filepath.Join(dest, "skipped-dir")
+	if err := os.MkdirAll(skipped, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skipped, "note.txt"), []byte("keep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncFlattenedSkillsSkipping(dest, []string{"skipped-dir"}, src); err != nil {
+		t.Fatal(err)
+	}
+
+	if isSymlink(skipped) {
+		t.Fatalf("expected %s to remain a real directory, not become a symlink", skipped)
+	}
+	if !isDir(skipped) {
+		t.Fatalf("expected %s to still exist as a directory", skipped)
+	}
+	content, err := os.ReadFile(filepath.Join(skipped, "note.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "keep me" {
+		t.Fatalf("expected original content to survive, got %q", content)
+	}
+	if exists(filepath.Join(src, "skipped-dir")) {
+		t.Fatalf("expected skipped dir to not be absorbed into %s", src)
+	}
+}
+
+func TestSyncFlattenedSkillsSkippingSymlinkSurvives(t *testing.T) {
+	src := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(src, "skill-a"))
+
+	staleTarget := t.TempDir()
+	skipped := filepath.Join(dest, "skipped-link")
+	if err := os.Symlink(staleTarget, skipped); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncFlattenedSkillsSkipping(dest, []string{"skipped-link"}, src); err != nil {
+		t.Fatal(err)
+	}
+
+	if !isSymlink(skipped) {
+		t.Fatalf("expected %s to remain a symlink", skipped)
+	}
+	if resolve(skipped) != resolve(staleTarget) {
+		t.Fatalf("expected %s to still point at %s", skipped, staleTarget)
+	}
+}
+
 func TestSyncFlattenedSkillsRemovesSymlinkOfSkillRemovedFromRepo(t *testing.T) {
 	src := t.TempDir()
 	mkSkill(t, filepath.Join(src, "skill-a"))
