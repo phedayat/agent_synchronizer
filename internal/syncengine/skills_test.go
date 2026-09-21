@@ -291,7 +291,7 @@ func TestSyncFlattenedSkillsErrorsWhenSymlinkFails(t *testing.T) {
 	}
 }
 
-func TestSyncFlattenedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
+func TestSyncFlattenedSkillsRemovesUnmanagedSymlinkNotInDesired(t *testing.T) {
 	src := t.TempDir()
 	mkSkill(t, filepath.Join(src, "skill-a"))
 
@@ -306,11 +306,11 @@ func TestSyncFlattenedSkillsSkipsUnmanagedSymlinkNotInDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !isSymlink(orphan) {
-		t.Fatalf("expected orphan symlink to remain untouched")
+	if isSymlink(orphan) {
+		t.Fatalf("expected orphan symlink to be removed")
 	}
-	if resolve(orphan) != resolve(orphanTarget) {
-		t.Fatalf("expected orphan symlink target unchanged")
+	if _, err := os.Lstat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("expected orphan symlink path to no longer exist, got err=%v", err)
 	}
 }
 
