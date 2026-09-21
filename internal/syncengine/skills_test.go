@@ -805,3 +805,121 @@ func TestSyncFlattenedSkillsErrorsWhenRemovingUnmanagedSymlinkFails(t *testing.T
 		t.Fatal("expected error when removing unmanaged symlink fails")
 	}
 }
+
+func TestSyncPartiallyGroupedSkillsAbsorbsRealContentFromStaleGroupDirectory(t *testing.T) {
+	withApprovedStdin(t)
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+
+	// Create one skill under a known group to establish normal dest structure
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	// First sync to set up normal dest structure
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually create a stale group directory with unmanaged content
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a stale symlink in the stale group
+	staleSymlink := filepath.Join(staleGroupDir, "stale-skill")
+	if err := os.Symlink(t.TempDir(), staleSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a real unmanaged skill in the stale group
+	realSkill := filepath.Join(staleGroupDir, "real-skill")
+	mkSkill(t, realSkill)
+
+	// Second sync to absorb the stale group's content
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert: stale symlink is deleted
+	if _, err := os.Lstat(staleSymlink); !os.IsNotExist(err) {
+		t.Fatalf("expected stale symlink to be removed, but it still exists or has error: %v", err)
+	}
+
+	// Assert: real-skill moved to flattenSrc (stale groups are absorbed into flattenSrc)
+	movedSkill := filepath.Join(flattenSrc, "stale-group", "real-skill")
+	if !isDir(movedSkill) {
+		t.Fatalf("expected real-skill to be moved to %s", movedSkill)
+	}
+	if !exists(filepath.Join(movedSkill, "SKILL.md")) {
+		t.Fatalf("expected SKILL.md to exist in moved real-skill at %s", movedSkill)
+	}
+
+	// Assert: stale-group directory is removed from dest (now empty)
+	if exists(staleGroupDir) {
+		t.Fatalf("expected stale-group directory to be removed from dest since it became empty")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsPreservesStaleGroupDirectoryWithUnapprovedRealContent(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+
+	// Create one skill under a known group to establish normal dest structure
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	// First sync to set up normal dest structure (no special stdin needed, no unmanaged content yet)
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually create a stale group directory with unmanaged content
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a stale symlink in the stale group
+	staleSymlink := filepath.Join(staleGroupDir, "stale-skill")
+	if err := os.Symlink(t.TempDir(), staleSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a real unmanaged skill in the stale group
+	realSkill := filepath.Join(staleGroupDir, "real-skill")
+	mkSkill(t, realSkill)
+
+	// Second sync with declined move prompt
+	withStdin(t, "n\n")
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert: stale symlink is still removed (unconditional deletion)
+	if _, err := os.Lstat(staleSymlink); !os.IsNotExist(err) {
+		t.Fatalf("expected stale symlink to be removed even with declined prompt, but it still exists or has error: %v", err)
+	}
+
+	// Assert: real content is NOT moved - still in dest (move was declined)
+	if !exists(realSkill) {
+		t.Fatalf("expected real-skill to remain in dest since move was declined")
+	}
+	if !exists(filepath.Join(realSkill, "SKILL.md")) {
+		t.Fatalf("expected SKILL.md to still exist in real-skill at dest")
+	}
+
+	// Assert: stale-group directory is NOT removed (still has content)
+	if !exists(staleGroupDir) {
+		t.Fatalf("expected stale-group directory to remain in dest since it still has content")
+	}
+
+	// Bonus: verify copy WAS made to repo (move() copies to dest even on decline)
+	copiedSkill := filepath.Join(flattenSrc, "stale-group", "real-skill")
+	if !isDir(copiedSkill) {
+		t.Fatalf("expected real-skill to be copied to %s since move() copies before checking approval", copiedSkill)
+	}
+	if !exists(filepath.Join(copiedSkill, "SKILL.md")) {
+		t.Fatalf("expected SKILL.md to exist in copied real-skill at %s", copiedSkill)
+	}
+}
