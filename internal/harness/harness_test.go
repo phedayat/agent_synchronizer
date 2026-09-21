@@ -279,8 +279,11 @@ func TestOpenCodeSyncTargets(t *testing.T) {
 	}
 }
 
-func TestSyncCallsAllFiveMethodsInOrder(t *testing.T) {
-	h := NewClaude("/repo")
+func TestSyncCallsAllSixMethodsInOrder(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	mustMkdirAll(t, filepath.Join(repoRoot, "common", "extra-dir"))
+	h := NewClaude(repoRoot)
 
 	var order []string
 	origTarget := syncTarget
@@ -290,6 +293,7 @@ func TestSyncCallsAllFiveMethodsInOrder(t *testing.T) {
 		return nil
 	}
 	subagentsDest := filepath.Join(h.Home, "agents")
+	extrasDest := filepath.Join(h.Home, "extra-dir")
 	syncTarget = func(src, dest string) error {
 		switch dest {
 		case subagentsDest:
@@ -300,6 +304,8 @@ func TestSyncCallsAllFiveMethodsInOrder(t *testing.T) {
 			order = append(order, "rules")
 		case h.HooksDest:
 			order = append(order, "hooks")
+		case extrasDest:
+			order = append(order, "extras")
 		}
 		return nil
 	}
@@ -312,7 +318,7 @@ func TestSyncCallsAllFiveMethodsInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []string{"skills", "subagents", "config", "rules", "hooks"}
+	want := []string{"skills", "subagents", "config", "rules", "hooks", "extras"}
 	if !reflect.DeepEqual(order, want) {
 		t.Fatalf("call order = %v, want %v", order, want)
 	}
@@ -624,5 +630,132 @@ func mustMkdirAll(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSyncExtrasSymlinksUnknownTopLevelEntries(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	mustWriteFile(t, filepath.Join(repoRoot, "common", "notes.txt"), "shared notes")
+	mustMkdirAll(t, filepath.Join(repoRoot, "claude", "extra-dir"))
+	mustWriteFile(t, filepath.Join(repoRoot, "claude", "extra-dir", "file.txt"), "content")
+
+	h := NewClaude(repoRoot)
+	if err := h.SyncExtras(); err != nil {
+		t.Fatal(err)
+	}
+
+	notesLink := filepath.Join(h.Home, "notes.txt")
+	if info, err := os.Lstat(notesLink); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected %s to be a symlink, err=%v", notesLink, err)
+	}
+	dirLink := filepath.Join(h.Home, "extra-dir")
+	if info, err := os.Lstat(dirLink); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected %s to be a symlink, err=%v", dirLink, err)
+	}
+	if _, err := os.Stat(filepath.Join(dirLink, "file.txt")); err != nil {
+		t.Fatalf("expected extra-dir symlink to resolve to real content: %v", err)
+	}
+}
+
+func TestSyncExtrasSkipsKnownNames(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	mustMkdirAll(t, filepath.Join(repoRoot, "common", "skills"))
+	mustMkdirAll(t, filepath.Join(repoRoot, "common", "agents"))
+	mustWriteFile(t, filepath.Join(repoRoot, "claude", "settings.json"), "{}")
+	mustWriteFile(t, filepath.Join(repoRoot, "claude", "CLAUDE.md"), "# claude")
+	mustMkdirAll(t, filepath.Join(repoRoot, "claude", "hooks"))
+
+	h := NewClaude(repoRoot)
+	targetCalls, _ := stubSync(t)
+
+	if err := h.SyncExtras(); err != nil {
+		t.Fatal(err)
+	}
+	if len(*targetCalls) != 0 {
+		t.Fatalf("expected no extras calls for known names, got %+v", *targetCalls)
+	}
+}
+
+func TestSyncExtrasHarnessSpecificOverridesCommon(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	mustWriteFile(t, filepath.Join(repoRoot, "common", "shared.txt"), "common version")
+	mustWriteFile(t, filepath.Join(repoRoot, "claude", "shared.txt"), "claude version")
+
+	h := NewClaude(repoRoot)
+	if err := h.SyncExtras(); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(h.Home, "shared.txt")
+	target, err := os.Readlink(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(repoRoot, "claude", "shared.txt")
+	if target != want {
+		t.Fatalf("symlink target = %q, want %q (harness-specific should win)", target, want)
+	}
+}
+
+func TestSyncExtrasNoopWhenNeitherDirExists(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	h := NewClaude(filepath.Join(t.TempDir(), "missing-repo"))
+	targetCalls, _ := stubSync(t)
+
+	if err := h.SyncExtras(); err != nil {
+		t.Fatal(err)
+	}
+	if len(*targetCalls) != 0 {
+		t.Fatalf("expected no calls, got %+v", *targetCalls)
+	}
+}
+
+func TestSyncExtrasErrorsWhenCommonDirUnreadable(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	commonDir := filepath.Join(repoRoot, "common")
+	mustMkdirAll(t, commonDir)
+	if err := os.Chmod(commonDir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(commonDir, 0o755) })
+
+	h := NewClaude(repoRoot)
+	if err := h.SyncExtras(); err == nil {
+		t.Fatal("expected error when common dir cannot be read")
+	}
+}
+
+func TestSyncExtrasErrorsWhenRepoDirUnreadable(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	repoDir := filepath.Join(repoRoot, "claude")
+	mustMkdirAll(t, repoDir)
+	if err := os.Chmod(repoDir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(repoDir, 0o755) })
+
+	h := NewClaude(repoRoot)
+	if err := h.SyncExtras(); err == nil {
+		t.Fatal("expected error when repo dir cannot be read")
+	}
+}
+
+func TestSyncExtrasErrorsWhenSyncTargetFails(t *testing.T) {
+	repoRoot := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	mustWriteFile(t, filepath.Join(repoRoot, "common", "notes.txt"), "content")
+
+	h := NewClaude(repoRoot)
+	origTarget := syncTarget
+	syncTarget = func(src, dest string) error { return os.ErrInvalid }
+	t.Cleanup(func() { syncTarget = origTarget })
+
+	if err := h.SyncExtras(); err != os.ErrInvalid {
+		t.Fatalf("err = %v, want %v", err, os.ErrInvalid)
 	}
 }
