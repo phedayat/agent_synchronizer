@@ -1034,3 +1034,117 @@ func TestSyncPartiallyGroupedSkillsErrorsWhenNestedStaleGroupReadDirFails(t *tes
 		t.Fatal("expected error when absorbStaleGroupSubtree recurses into an unreadable nested directory")
 	}
 }
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenNestedContainsSymlinkReadDirFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleDir := filepath.Join(dest, "stale-err")
+	blockedNested := filepath.Join(staleDir, "blocked-nested")
+	if err := os.MkdirAll(blockedNested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(blockedNested, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blockedNested, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when containsSymlink's nested recursive call fails to read a subdirectory")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsAbsorbsStaleGroupWithNestedSymlinkOnly(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	staleDir := filepath.Join(dest, "stale-found")
+	inner := filepath.Join(staleDir, "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(inner, "deep-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	if exists(staleDir) {
+		t.Fatalf("expected %s to be fully removed once its only content (a nested symlink) was cleaned up", staleDir)
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenStaleGroupContentMoveFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-create a FILE (not a directory) at the exact path move() will need
+	// to MkdirAll into, so move()'s os.MkdirAll(filepath.Dir(dest), 0o755)
+	// fails because a non-directory already occupies that path.
+	blockingPath := filepath.Join(flattenSrc, "stale-group")
+	if err := os.WriteFile(blockingPath, []byte("blocking"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGroupDir := filepath.Join(dest, "stale-group")
+	if err := os.MkdirAll(staleGroupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(staleGroupDir, "stale-skill")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staleGroupDir, "note.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when move() fails to absorb real content from a stale group directory")
+	}
+}
+
+func TestSyncPartiallyGroupedSkillsErrorsWhenFlatStaleSymlinkRemovalFails(t *testing.T) {
+	flattenSrc := t.TempDir()
+	groupedSrc := t.TempDir()
+	dest := t.TempDir()
+	mkSkill(t, filepath.Join(groupedSrc, "group-known", "skill-known"))
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a stale flat-level symlink (no nesting, directly under dest)
+	staleSymlink := filepath.Join(dest, "stale-flat")
+	if err := os.Symlink(t.TempDir(), staleSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make dest read-only so the flat stale symlink cannot be removed
+	if err := os.Chmod(dest, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc); err == nil {
+		t.Fatal("expected error when flat stale symlink removal fails in absorbGroupedSkills")
+	}
+}

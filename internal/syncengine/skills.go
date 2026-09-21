@@ -272,7 +272,7 @@ func absorbGroupedSkills(dirPath, relPrefix, flattenSrc, groupedSrc string, flat
 		}
 
 		if isSymlink(childPath) {
-			stale := true
+			var stale bool
 			if relPrefix == "" {
 				_, ok := flat[name]
 				stale = !ok
