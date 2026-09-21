@@ -4,6 +4,11 @@
 
 - This project synchronizes shared agent files/directories across provider folders.
 - Keep implementation minimal, explicit, and safe for filesystem operations.
+- The repo is the source of truth for both its own files and the agent
+  config (destination) directories; this tool's job is to keep the repo's
+  files and the destination symlinks in sync bidirectionally, including
+  removing destination symlinks (and directories) whose repo source has
+  been removed.
 
 ## Core Principles
 
@@ -111,6 +116,14 @@
   `repo_root`/`$HOME` before running against a real one.
 - Do not overwrite existing real files/directories unless explicitly intended.
 - Preserve existing user data and local provider configuration.
+- Deleting a destination symlink or directory because its repo source is
+  gone is intentional cleanup, not data loss — the repo source of truth
+  never changes as a result; before removing a directory, confirm it holds
+  no absorbable real (non-symlink) content, and absorb that content back
+  into the repo first.
+- Removal recursion always walks strictly downward through real (non-
+  symlink) directories on the destination side, so it terminates and never
+  follows a symlink into a cycle.
 
 ## Change Discipline
 
