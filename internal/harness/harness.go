@@ -10,9 +10,10 @@ import (
 
 // Seams for tests to substitute stubs without touching the filesystem.
 var (
-	syncTarget                 = syncengine.SyncTarget
-	syncFlattenedSkills        = syncengine.SyncFlattenedSkills
-	syncPartiallyGroupedSkills = syncengine.SyncPartiallyGroupedSkills
+	syncTarget                  = syncengine.SyncTarget
+	syncFlattenedSkills         = syncengine.SyncFlattenedSkills
+	syncFlattenedSkillsSkipping = syncengine.SyncFlattenedSkillsSkipping
+	syncPartiallyGroupedSkills  = syncengine.SyncPartiallyGroupedSkills
 )
 
 // Harness mirrors sync_engine.py's Harness ABC as a single config-driven
@@ -30,6 +31,11 @@ type Harness struct {
 	HooksSrc, HooksDest   string
 
 	PreserveSkillGroups bool
+
+	// SkillsSkipDestNames lists destination basenames under <home>/skills
+	// that SyncSkills leaves untouched, for every harness except Claude,
+	// unaffected (default nil).
+	SkillsSkipDestNames []string
 }
 
 func (h *Harness) RepoDir() string {
@@ -48,6 +54,14 @@ func (h *Harness) SyncSkills() error {
 	if h.PreserveSkillGroups {
 		return syncPartiallyGroupedSkills(
 			filepath.Join(h.Home, "skills"),
+			filepath.Join(h.CommonDir(), "skills"),
+			h.SkillsDir(),
+		)
+	}
+	if len(h.SkillsSkipDestNames) > 0 {
+		return syncFlattenedSkillsSkipping(
+			filepath.Join(h.Home, "skills"),
+			h.SkillsSkipDestNames,
 			filepath.Join(h.CommonDir(), "skills"),
 			h.SkillsDir(),
 		)
@@ -183,6 +197,8 @@ func NewClaude(repo string) *Harness {
 		RulesDest:  filepath.Join(home, "CLAUDE.md"),
 		HooksSrc:   filepath.Join(repoDir, "hooks"),
 		HooksDest:  filepath.Join(home, "hooks"),
+
+		SkillsSkipDestNames: []string{"synced"},
 	}
 }
 
