@@ -194,13 +194,28 @@ func absorbGroupedSkills(dirPath, relPrefix, flattenSrc, groupedSrc string, flat
 	for _, entry := range entries {
 		name := entry.Name()
 		childPath := filepath.Join(dirPath, name)
-		if isSymlink(childPath) {
-			continue
-		}
 
 		childRel := name
 		if relPrefix != "" {
 			childRel = relPrefix + "/" + name
+		}
+
+		if isSymlink(childPath) {
+			stale := true
+			if relPrefix == "" {
+				_, ok := flat[name]
+				stale = !ok
+			} else {
+				_, ok := grouped[childRel]
+				stale = !ok
+			}
+			if stale {
+				logger.Info(fmt.Sprintf("Removing stale skill symlink %s", childPath))
+				if err := os.Remove(childPath); err != nil {
+					return err
+				}
+			}
+			continue
 		}
 
 		if relPrefix == "" {
