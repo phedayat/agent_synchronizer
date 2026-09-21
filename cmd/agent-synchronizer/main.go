@@ -46,6 +46,7 @@ func run(repoRootArg string) error {
 	for _, h := range allHarnesses(repo) {
 		logger.Info(fmt.Sprintf("Syncing %s", h.Name))
 		if err := h.Sync(); err != nil {
+			logger.Error(fmt.Sprintf("Failed to sync %s: %v", h.Name, err))
 			return err
 		}
 	}
