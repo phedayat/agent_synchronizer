@@ -179,6 +179,77 @@ func SyncPartiallyGroupedSkills(dest, flattenSrc, groupedSrc string) error {
 	return nil
 }
 
+// containsSymlink reports whether dirPath, or any directory beneath it,
+// contains a symlink.
+func containsSymlink(dirPath string) (bool, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		childPath := filepath.Join(dirPath, entry.Name())
+		if isSymlink(childPath) {
+			return true, nil
+		}
+		if entry.IsDir() {
+			found, err := containsSymlink(childPath)
+			if err != nil {
+				return false, err
+			}
+			if found {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// absorbStaleGroupSubtree cleans up a dest-side directory whose relative
+// path is no longer known to the repo: stale symlinks underneath it are
+// deleted, remaining real content is moved back into srcRoot at the same
+// relative path, and the directory itself is removed once empty.
+func absorbStaleGroupSubtree(dirPath, rel, srcRoot string) error {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return err
+	}
+	empty := true
+	for _, entry := range entries {
+		name := entry.Name()
+		childPath := filepath.Join(dirPath, name)
+		childRel := rel + "/" + name
+		switch {
+		case isSymlink(childPath):
+			logger.Info(fmt.Sprintf("Removing stale skill symlink %s", childPath))
+			if err := os.Remove(childPath); err != nil {
+				return err
+			}
+		case entry.IsDir():
+			if err := absorbStaleGroupSubtree(childPath, childRel, srcRoot); err != nil {
+				return err
+			}
+			if exists(childPath) {
+				empty = false
+			}
+		default:
+			target := filepath.Join(srcRoot, filepath.FromSlash(childRel))
+			if err := move(childPath, target); err != nil {
+				return err
+			}
+			if exists(childPath) {
+				empty = false
+			}
+		}
+	}
+	if empty {
+		logger.Info(fmt.Sprintf("Removing stale group directory %s", dirPath))
+		if err := os.RemoveAll(dirPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // absorbGroupedSkills moves unmanaged real entries under dirPath (dest, or
 // one of its known group subdirectories, identified by relPrefix) into the
 // repo: entries at the top level (relPrefix == "") go to flattenSrc, entries
@@ -231,6 +302,23 @@ func absorbGroupedSkills(dirPath, relPrefix, flattenSrc, groupedSrc string, flat
 				return err
 			}
 			continue
+		}
+
+		srcRoot := flattenSrc
+		if relPrefix != "" {
+			srcRoot = groupedSrc
+		}
+		if entry.IsDir() {
+			hasSymlink, err := containsSymlink(childPath)
+			if err != nil {
+				return err
+			}
+			if hasSymlink {
+				if err := absorbStaleGroupSubtree(childPath, childRel, srcRoot); err != nil {
+					return err
+				}
+				continue
+			}
 		}
 
 		if relPrefix == "" {
