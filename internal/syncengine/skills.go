@@ -57,6 +57,18 @@ func collectSkills(sources ...string) map[string]string {
 // roots into dest, so every skill directory sits directly under dest.
 // Mirrors sync_engine.py's sync_flattened_skills.
 func SyncFlattenedSkills(dest string, sources ...string) error {
+	return SyncFlattenedSkillsSkipping(dest, nil, sources...)
+}
+
+// SyncFlattenedSkillsSkipping behaves like SyncFlattenedSkills, except any
+// dest entry whose name is in skip is left completely untouched: not
+// absorbed, not removed, not treated as stale.
+func SyncFlattenedSkillsSkipping(dest string, skip []string, sources ...string) error {
+	skipSet := make(map[string]struct{}, len(skip))
+	for _, name := range skip {
+		skipSet[name] = struct{}{}
+	}
+
 	desired := collectSkills(sources...)
 
 	if isSymlink(dest) {
@@ -75,6 +87,9 @@ func SyncFlattenedSkills(dest string, sources ...string) error {
 	lastSource := sources[len(sources)-1]
 	for _, entry := range entries {
 		name := entry.Name()
+		if _, ok := skipSet[name]; ok {
+			continue
+		}
 		if _, ok := desired[name]; ok {
 			continue
 		}
