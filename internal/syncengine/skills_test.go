@@ -768,3 +768,40 @@ func TestSyncFlattenedSkillsRebuildsStaleWholeDirSymlink(t *testing.T) {
 		t.Fatalf("expected %s to symlink to %s", link, skillA)
 	}
 }
+
+func TestSyncFlattenedSkillsRemovesSymlinkOfSkillRemovedFromRepo(t *testing.T) {
+	src := t.TempDir()
+	mkSkill(t, filepath.Join(src, "skill-a"))
+	dest := t.TempDir()
+	if err := SyncFlattenedSkills(dest, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(src, "skill-a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := SyncFlattenedSkills(dest, src); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dest, "skill-a")); !os.IsNotExist(err) {
+		t.Fatalf("expected removed skill's symlink to be gone")
+	}
+}
+
+func TestSyncFlattenedSkillsErrorsWhenRemovingUnmanagedSymlinkFails(t *testing.T) {
+	src := t.TempDir()
+	mkSkill(t, filepath.Join(src, "skill-a"))
+
+	dest := t.TempDir()
+	orphan := filepath.Join(dest, "orphan")
+	if err := os.Symlink(t.TempDir(), orphan); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dest, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+
+	if err := SyncFlattenedSkills(dest, src); err == nil {
+		t.Fatal("expected error when removing unmanaged symlink fails")
+	}
+}
